@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LSA ROI Calculator — LeadField Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #080a0d;
+      --card: #0f1318;
+      --card2: #131920;
+      --border: #1e2730;
+      --border2: #253040;
+      --accent: #f0a500;
+      --text: #e8edf2;
+      --text-muted: #6b7f94;
+      --text-dim: #3d5166;
+      --green: #1db954;
+      --font-display: 'Barlow Condensed', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+      --font-body: 'DM Sans', sans-serif;
+    }
+    html, body { min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--bg); } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    a { color: var(--accent); }
+
+    .header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-logo { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: 0.08em; color: var(--accent); }
+    .header-sub { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 1px; }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .hero { text-align: center; margin-bottom: 48px; }
+    .hero h1 { font-family: var(--font-display); font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 12px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { font-size: 17px; color: var(--text-muted); max-width: 520px; margin: 0 auto; }
+
+    /* Vertical tabs */
+    .vertical-tabs { display: flex; gap: 6px; margin-bottom: 28px; flex-wrap: wrap; justify-content: center; }
+    .vtab {
+      padding: 8px 20px;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .vtab:hover { color: var(--text); border-color: var(--text-muted); }
+    .vtab.active { color: #000; background: var(--accent); border-color: var(--accent); }
+
+    /* Layout */
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 680px) { .layout { grid-template-columns: 1fr; } .hero h1 { font-size: 44px; } }
+
+    /* Card */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    .card-title { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 20px; }
+
+    /* Sliders */
+    .slider-group { margin-bottom: 18px; }
+    .slider-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .slider-name { font-size: 13px; color: var(--text-muted); }
+    .slider-val { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--accent); }
+    input[type="range"] {
+      width: 100%;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border2);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+
+    /* Big number */
+    .result-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 28px; text-align: center; margin-bottom: 20px; position: relative; overflow: hidden; }
+    .result-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at top, rgba(240,165,0,0.06) 0%, transparent 70%); pointer-events: none; }
+    .result-label { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .result-amount { font-family: var(--font-mono); font-size: 56px; font-weight: 500; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+    .result-period { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
+    .result-annual { font-family: var(--font-mono); font-size: 18px; color: var(--text-muted); margin-top: 12px; }
+    .result-annual span { color: var(--text); }
+
+    /* Funnel */
+    .funnel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .funnel-step { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; }
+    .funnel-n { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--accent); width: 60px; text-align: right; flex-shrink: 0; }
+    .funnel-label { font-size: 13px; color: var(--text-muted); }
+    .funnel-arrow { text-align: center; color: var(--text-dim); font-size: 16px; padding: 0 14px; }
+
+    /* Math breakdown */
+    .math-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .math-row:last-child { border-bottom: none; }
+    .math-row .key { color: var(--text-muted); }
+    .math-row .val { font-family: var(--font-mono); color: var(--text); }
+    .math-row.total .key { color: var(--text); font-weight: 600; }
+    .math-row.total .val { color: var(--accent); font-size: 15px; }
+
+    /* Competitor context */
+    .context-bar { margin-bottom: 12px; }
+    .context-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .bar-track { height: 6px; background: var(--border); border-radius: 3px; }
+    .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s; }
+
+    /* CTA */
+    .cta-section { margin-top: 32px; text-align: center; }
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 36px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cta-btn:hover { background: #fbb800; transform: translateY(-1px); }
+    .cta-sub { font-size: 13px; color: var(--text-muted); margin-top: 10px; }
+
+    /* ROI multiple badge */
+    .roi-badge { display: inline-block; background: rgba(29,185,84,0.12); border: 1px solid rgba(29,185,84,0.3); color: var(--green); padding: 6px 16px; border-radius: 4px; font-family: var(--font-mono); font-size: 14px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">LEADFIELD PRO</div>
+    <div class="header-sub">LSA Gap Intelligence</div>
+  </div>
+  <a href="mailto:gentry.gevers@gmail.com" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">gentry.gevers@gmail.com</a>
+</div>
+
+<div class="container">
+  <div class="hero">
+    <h1>How Much Are You <span>Missing</span>?</h1>
+    <p>Calculate the revenue you're leaving on the table by not running Google Local Service Ads.</p>
+  </div>
+
+  <!-- Vertical tabs -->
+  <div class="vertical-tabs">
+    <button class="vtab active" data-v="hvac">HVAC</button>
+    <button class="vtab" data-v="plumbing">Plumbing</button>
+    <button class="vtab" data-v="electrical">Electrical</button>
+    <button class="vtab" data-v="roofing">Roofing</button>
+    <button class="vtab" data-v="landscaping">Landscaping</button>
+  </div>
+
+  <!-- Big result -->
+  <div class="result-card">
+    <div class="result-label">Monthly Revenue You're Missing</div>
+    <div class="result-amount" id="monthly-amount">$0</div>
+    <div class="result-period">per month</div>
+    <div class="result-annual">Over a year: <span id="annual-amount">$0</span></div>
+    <div id="roi-badge" class="roi-badge" style="margin-top:14px">— ROI multiple</div>
+  </div>
+
+  <div class="layout">
+    <!-- Left: Sliders -->
+    <div>
+      <div class="card">
+        <div class="card-title">Your Business Inputs</div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span class="slider-name">Monthly LSA calls available</span>
+            <span class="slider-val" id="val-calls">28</span>
+          </div>
+          <input type="range" id="sl-calls" min="5" max="80" value="28" step="1" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span class="slider-name">Close rate</span>
+            <span class="slider-val" id="val-close">42%</span>
+          </div>
+          <input type="range" id="sl-close" min="10" max="90" value="42" step="1" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span class="slider-name">Average job ticket</span>
+            <span class="slider-val" id="val-ticket">$485</span>
+          </div>
+          <input type="range" id="sl-ticket" min="150" max="15000" value="485" step="25" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span class="slider-name">Call answer rate</span>
+            <span class="slider-val" id="val-answer">78%</span>
+          </div>
+          <input type="range" id="sl-answer" min="30" max="99" value="78" step="1" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span class="slider-name">Months without LSA</span>
+            <span class="slider-val" id="val-months">6</span>
+          </div>
+          <input type="range" id="sl-months" min="1" max="36" value="6" step="1" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: breakdown -->
+    <div>
+      <!-- Lead funnel -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Lead Funnel</div>
+        <div class="funnel">
+          <div class="funnel-step">
+            <div class="funnel-n" id="f-calls">28</div>
+            <div class="funnel-label">LSA calls/month</div>
+          </div>
+          <div class="funnel-arrow">↓</div>
+          <div class="funnel-step">
+            <div class="funnel-n" id="f-missed">6</div>
+            <div class="funnel-label">Missed (unanswered) calls</div>
+          </div>
+          <div class="funnel-arrow">↓</div>
+          <div class="funnel-step">
+            <div class="funnel-n" id="f-jobs">3</div>
+            <div class="funnel-label">Lost jobs/month</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Math breakdown -->
+      <div class="card">
+        <div class="card-title">Full Math Breakdown</div>
+        <div class="math-row"><span class="key">Monthly calls</span><span class="val" id="m-calls">28</span></div>
+        <div class="math-row"><span class="key">Missed (unanswered)</span><span class="val" id="m-missed">6</span></div>
+        <div class="math-row"><span class="key">Converted at <span id="m-cr">42</span>%</span><span class="val" id="m-jobs">3</span></div>
+        <div class="math-row"><span class="key">× Avg ticket</span><span class="val" id="m-ticket">$485</span></div>
+        <div class="math-row total"><span class="key">Monthly missed revenue</span><span class="val" id="m-monthly">$0</span></div>
+        <div class="math-row total"><span class="key">Over <span id="m-months">6</span> months</span><span class="val" id="m-total">$0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Competitor context -->
+  <div class="card" style="margin-top:20px">
+    <div class="card-title">Your Market vs. Competitors Running LSA</div>
+    <div id="context-bars"></div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <button class="cta-btn" id="cta-btn">
+      ⚡ Get Started With LSA
+    </button>
+    <div class="cta-sub">No commitment — I'll walk you through what LSA looks like for your specific business.</div>
+  </div>
+</div>
+
+<script>
+const BENCHMARKS = {
+  hvac:        { calls: 28, close: 42, ticket: 485,  answer: 78, label: 'HVAC' },
+  plumbing:    { calls: 22, close: 55, ticket: 310,  answer: 80, label: 'Plumbing' },
+  electrical:  { calls: 18, close: 48, ticket: 420,  answer: 75, label: 'Electrical' },
+  roofing:     { calls: 12, close: 35, ticket: 8500, answer: 70, label: 'Roofing' },
+  landscaping: { calls: 35, close: 60, ticket: 280,  answer: 82, label: 'Landscaping' }
+};
+
+let currentVertical = 'hvac';
+
+function fmt(n) {
+  if (n >= 1000) return '$' + (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
+  return '$' + Math.round(n).toLocaleString();
+}
+function fmtFull(n) { return '$' + Math.round(n).toLocaleString(); }
+
+function get(id) { return document.getElementById(id); }
+function val(id) { return parseInt(get(id).value); }
+
+function update() {
+  const calls = val('sl-calls');
+  const close = val('sl-close');
+  const ticket = val('sl-ticket');
+  const answer = val('sl-answer');
+  const months = val('sl-months');
+
+  // Update display vals
+  get('val-calls').textContent = calls;
+  get('val-close').textContent = close + '%';
+  get('val-ticket').textContent = fmtFull(ticket);
+  get('val-answer').textContent = answer + '%';
+  get('val-months').textContent = months;
+
+  // Calc
+  const missedCalls = Math.round(calls * (1 - answer / 100));
+  const lostJobs = Math.round(missedCalls * close / 100);
+  const monthly = lostJobs * ticket;
+  const annual = monthly * 12;
+  const total = monthly * months;
+  const lsaCost = 300 * months; // rough $300/mo LSA spend estimate
+  const roi = lsaCost > 0 ? (total / lsaCost).toFixed(1) : '∞';
+
+  // Big number
+  get('monthly-amount').textContent = fmtFull(monthly);
+  get('annual-amount').textContent = fmtFull(annual);
+  get('roi-badge').textContent = `${roi}x ROI vs. estimated LSA cost`;
+
+  // Funnel
+  get('f-calls').textContent = calls;
+  get('f-missed').textContent = missedCalls;
+  get('f-jobs').textContent = lostJobs;
+
+  // Math
+  get('m-calls').textContent = calls;
+  get('m-missed').textContent = missedCalls;
+  get('m-cr').textContent = close;
+  get('m-jobs').textContent = lostJobs;
+  get('m-ticket').textContent = fmtFull(ticket);
+  get('m-monthly').textContent = fmtFull(monthly);
+  get('m-months').textContent = months;
+  get('m-total').textContent = fmtFull(total);
+
+  // Context bars
+  const b = BENCHMARKS[currentVertical];
+  const benchMonthly = Math.round(b.calls * (1 - b.answer/100) * (b.close/100) * b.ticket);
+  const maxV = Math.max(monthly, benchMonthly, 1);
+  get('context-bars').innerHTML = `
+    <div class="context-bar">
+      <div class="context-label"><span>Your current gap</span><span style="color:var(--accent);font-family:var(--font-mono)">${fmtFull(monthly)}/mo</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(monthly/maxV*100)}%"></div></div>
+    </div>
+    <div class="context-bar">
+      <div class="context-label"><span>${b.label} market avg gap</span><span style="font-family:var(--font-mono);color:var(--text-muted)">${fmtFull(benchMonthly)}/mo</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(benchMonthly/maxV*100)}%;background:var(--text-dim)"></div></div>
+    </div>
+  `;
+}
+
+// Vertical tabs
+document.querySelectorAll('.vtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.vtab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentVertical = btn.dataset.v;
+    const b = BENCHMARKS[currentVertical];
+    get('sl-calls').value = b.calls;
+    get('sl-close').value = b.close;
+    get('sl-ticket').value = b.ticket;
+    get('sl-answer').value = b.answer;
+    update();
+  });
+});
+
+// Sliders
+['sl-calls','sl-close','sl-ticket','sl-answer','sl-months'].forEach(id => {
+  get(id).addEventListener('input', update);
+});
+
+// CTA
+get('cta-btn').addEventListener('click', () => {
+  const calls = val('sl-calls');
+  const close = val('sl-close');
+  const ticket = val('sl-ticket');
+  const answer = val('sl-answer');
+  const months = val('sl-months');
+  const missedCalls = Math.round(calls * (1 - answer / 100));
+  const lostJobs = Math.round(missedCalls * close / 100);
+  const monthly = lostJobs * ticket;
+  const total = monthly * months;
+
+  const subject = encodeURIComponent(`LSA inquiry — missing ${fmtFull(monthly)}/mo`);
+  const body = encodeURIComponent(
+    `Hi Gentry,\n\nI just used your LSA ROI calculator and my numbers came out to:\n\n` +
+    `Vertical: ${BENCHMARKS[currentVertical].label}\n` +
+    `Monthly LSA calls: ${calls}\nClose rate: ${close}%\nAvg ticket: ${fmtFull(ticket)}\nAnswer rate: ${answer}%\n` +
+    `Months without LSA: ${months}\n\nMonthly missed revenue: ${fmtFull(monthly)}\nTotal missed (${months} mo): ${fmtFull(total)}\n\n` +
+    `I'd like to learn more about getting started with LSA.\n\nThanks`
+  );
+  window.location.href = `mailto:gentry.gevers@gmail.com?subject=${subject}&body=${body}`;
+});
+
+update();
+</script>
+</body>
+</html>
