@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api, STATUSES, VERTICAL_LABELS, formatMoney, statusBadgeClass, sourceTagClass } from '../utils/api';
 import { buildPitchEmail, buildGmailUrl } from '../utils/pitch';
 import CsvImportModal from '../components/CsvImportModal';
+import EnrichModal from '../components/EnrichModal';
 import { isLocalMode } from '../utils/localStore';
 
 export default function CRM() {
@@ -14,6 +15,7 @@ export default function CRM() {
   const [batchFinding, setBatchFinding] = useState(false);
   const [pitchModal, setPitchModal] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [enrichLead, setEnrichLead] = useState(null);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -245,6 +247,13 @@ export default function CRM() {
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button
                           className="btn btn-secondary btn-sm"
+                          onClick={() => setEnrichLead(lead)}
+                          title="Enrich lead"
+                        >
+                          <EnrichIcon />
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
                           onClick={() => openPitch(lead)}
                           disabled={!lead.email}
                           title={lead.email ? 'Send pitch' : 'Find email first'}
@@ -263,6 +272,18 @@ export default function CRM() {
           </div>
         )}
       </div>
+
+      {/* Enrich modal */}
+      {enrichLead && (
+        <EnrichModal
+          lead={enrichLead}
+          onClose={() => setEnrichLead(null)}
+          onUpdate={updated => {
+            setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+            setEnrichLead(updated);
+          }}
+        />
+      )}
 
       {/* CSV import modal */}
       {showImport && (
@@ -313,6 +334,7 @@ export default function CRM() {
   );
 }
 
+function EnrichIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>; }
 function UploadIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>; }
 function EmailIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>; }
 function SendIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>; }

@@ -70,6 +70,8 @@ export const api = {
   findEmail: (id) => request(`/email/find/${id}`, { method: 'POST' }),
   findEmailsBatch: (ids) => request('/email/find-batch', { method: 'POST', body: { ids } }),
 
+  refreshReviews: (id) => request(`/leads/${id}/refresh-reviews`, { method: 'POST' }),
+
   // Import always saves locally — no backend dependency
   importLeads: (leads) => localStore.addBatch(leads),
 

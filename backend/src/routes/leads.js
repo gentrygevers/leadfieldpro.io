@@ -40,6 +40,39 @@ router.post('/import', (req, res) => {
   res.json({ imported: saved.length, leads: saved });
 });
 
+// POST /api/leads/:id/refresh-reviews
+router.post('/:id/refresh-reviews', async (req, res) => {
+  const lead = leadsStore.getById(req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Not found' });
+
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'No Google Places API key configured' });
+
+  try {
+    // Search for the place
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(lead.name + ' ' + (lead.city || ''))}&key=${apiKey}`;
+    const searchRes = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+    const place = searchData.results?.[0];
+    if (!place) return res.status(404).json({ error: 'Place not found on Google' });
+
+    // Get place details
+    const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=rating,user_ratings_total&key=${apiKey}`;
+    const detailRes = await fetch(detailUrl);
+    const detailData = await detailRes.json();
+    const details = detailData.result || {};
+
+    const updates = {
+      rating: details.rating ?? lead.rating,
+      reviewCount: details.user_ratings_total ?? lead.reviewCount,
+    };
+    const updated = leadsStore.update(req.params.id, updates);
+    res.json({ rating: updated.rating, reviewCount: updated.reviewCount, lead: updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch from Google Places: ' + err.message });
+  }
+});
+
 // GET /api/leads/:id
 router.get('/:id', (req, res) => {
   const lead = leadsStore.getById(req.params.id);
