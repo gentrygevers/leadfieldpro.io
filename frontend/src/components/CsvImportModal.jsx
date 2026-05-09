@@ -1,28 +1,78 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { VERTICALS, VERTICAL_LABELS } from '../utils/api';
 
-const COLUMN_MAP = {
-  name:        ['name', 'business', 'company', 'business name', 'company name', 'title'],
-  city:        ['city', 'town', 'market', 'city name'],
-  state:       ['state', 'st', 'province', 'region', 'state/province'],
-  cityState:   ['city/state', 'city, state', 'location', 'city & state'],
-  address:     ['address', 'addr', 'full address', 'street', 'formatted address'],
-  phone:       ['phone', 'tel', 'telephone', 'phone number', 'contact'],
-  website:     ['website', 'url', 'web', 'site', 'website url', 'homepage'],
-  email:       ['email', 'mail', 'email address', 'e-mail'],
-  rating:      ['rating', 'stars', 'score', 'google rating', 'avg rating'],
-  reviewCount: ['reviews', 'review count', 'num reviews', 'number of reviews', 'ratings', 'total reviews'],
-  vertical:    ['vertical', 'category', 'type', 'industry', 'trade'],
+// ── Column name aliases ──────────────────────────────────────────────────────
+// Covers: Google Maps, Outscraper, Apollo, Yelp, manual spreadsheets
+const COLUMN_ALIASES = {
+  name:        ['name','business','company','business name','company name','title','place name',
+                 'business_name','biz_name','store name','merchant','organization','firm',
+                 'account name','dba','trade name','legal name'],
+  city:        ['city','town','market','city name','locality','municipality'],
+  state:       ['state','st','province','region','state/province','state_province','state code'],
+  cityState:   ['city/state','city, state','location','city & state','city_state','city (state)',
+                 'city state','market area'],
+  address:     ['address','addr','full address','street','formatted address','full_address',
+                 'street address','mailing address','business address','location address','place address'],
+  zip:         ['zip','zipcode','zip code','postal','postal code','zip_code'],
+  phone:       ['phone','tel','telephone','phone number','contact','phone_1','phone1','mobile',
+                 'cell','direct phone','work phone','office phone','main phone','business phone',
+                 'phone number 1','formatted_phone_number'],
+  website:     ['website','url','web','site','site url','website url','homepage','domain',
+                 'web address','site_name','http'],
+  email:       ['email','mail','email address','e-mail','email_1','contact email','work email',
+                 'business email','owner email'],
+  rating:      ['rating','stars','score','google rating','avg rating','average rating',
+                 'star rating','review score','rating_local_business','place_rating'],
+  reviewCount: ['reviews','review count','num reviews','number of reviews','ratings',
+                 'total reviews','review_count','reviews_count','user_ratings_total',
+                 'number_of_reviews','google reviews','reviews total'],
+  vertical:    ['vertical','category','type','industry','trade','category_1','business type',
+                 'service type','niche','primary category','main category','place_type'],
+  linkedinUrl: ['linkedin','linkedin url','linkedin_url','linkedin profile','li url',
+                 'linkedin link','linkedin page'],
+  notes:       ['notes','note','comments','comment','description','details','memo',
+                 'internal notes','sales notes'],
+  status:      ['status','lead status','pipeline','stage','crm status','outreach status'],
 };
 
-// Parse "Charlotte, NC" or "Charlotte NC" → { city, state }
-function splitCityState(raw) {
-  if (!raw) return { city: '', state: '' };
-  const match = raw.match(/^(.+?),?\s+([A-Z]{2})$/);
-  if (match) return { city: match[1].trim(), state: match[2] };
-  return { city: raw.trim(), state: '' };
-}
+const FIELD_OPTIONS = [
+  { value: '',           label: '— Skip —' },
+  { value: 'name',       label: 'Business Name' },
+  { value: 'phone',      label: 'Phone' },
+  { value: 'city',       label: 'City' },
+  { value: 'state',      label: 'State' },
+  { value: 'cityState',  label: 'City + State (combined)' },
+  { value: 'address',    label: 'Full Address' },
+  { value: 'zip',        label: 'ZIP Code' },
+  { value: 'website',    label: 'Website URL' },
+  { value: 'email',      label: 'Email' },
+  { value: 'rating',     label: 'Rating (0–5)' },
+  { value: 'reviewCount',label: 'Review Count' },
+  { value: 'vertical',   label: 'Vertical / Category' },
+  { value: 'linkedinUrl',label: 'LinkedIn URL' },
+  { value: 'notes',      label: 'Notes' },
+  { value: 'status',     label: 'Status' },
+];
 
+const VALID_STATUSES = new Set(['New','Researching','Contacted','Replied','Qualified','Closed']);
+const STATUS_NORMALIZE = {
+  new:'New', lead:'New', prospect:'New', fresh:'New',
+  researching:'Researching', research:'Researching', working:'Researching',
+  contacted:'Contacted', contact:'Contacted', sent:'Contacted', emailed:'Contacted', pitched:'Contacted',
+  replied:'Replied', reply:'Replied', responded:'Replied', response:'Replied',
+  qualified:'Qualified', qualify:'Qualified', hot:'Qualified',
+  closed:'Closed', won:'Closed', converted:'Closed', customer:'Closed',
+};
+
+const VERTICAL_PATTERNS = {
+  hvac:        /hvac|heating|cooling|air.?cond|furnace|duct|refriger/i,
+  plumbing:    /plumb|drain|sewer|pipe|water.?heat/i,
+  electrical:  /electric|wiring|electrician|solar|generator/i,
+  roofing:     /roof|gutter|shingle|siding|soffit/i,
+  landscaping: /landscap|lawn|garden|yard|mow|tree|sod|irrigation|snow.?remov/i,
+};
+
+// ── State helpers ────────────────────────────────────────────────────────────
 const US_STATES = {
   AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',
   CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',
@@ -35,102 +85,171 @@ const US_STATES = {
   WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'Washington DC',
 };
 
-// Normalize state: "NC", "North Carolina", "north carolina" → "NC"
 function normalizeState(raw) {
   if (!raw) return '';
   const up = raw.trim().toUpperCase();
   if (US_STATES[up]) return up;
   const lower = raw.trim().toLowerCase();
-  const match = Object.entries(US_STATES).find(([, name]) => name.toLowerCase() === lower);
-  return match ? match[0] : raw.trim().slice(0, 2).toUpperCase();
+  const found = Object.entries(US_STATES).find(([, n]) => n.toLowerCase() === lower);
+  return found ? found[0] : raw.trim().slice(0, 2).toUpperCase();
 }
 
-function detectColumns(headers) {
-  const mapping = {};
+function splitCityState(raw) {
+  if (!raw) return { city: '', state: '' };
+  const m = raw.match(/^(.+?),?\s+([A-Z]{2})$/);
+  if (m) return { city: m[1].trim(), state: m[2] };
+  return { city: raw.trim(), state: '' };
+}
+
+// "123 Main St, Charlotte, NC 28201" → { city: "Charlotte", state: "NC" }
+function cityStateFromAddress(addr) {
+  if (!addr) return null;
+  const m = addr.match(/,\s*([A-Za-z\s]{2,}),\s*([A-Z]{2})\s*\d{0,5}$/);
+  if (m) return { city: m[1].trim(), state: m[2] };
+  return null;
+}
+
+// ── Detection ────────────────────────────────────────────────────────────────
+function detectByName(headers) {
+  const map = {};
   headers.forEach((h, i) => {
-    const lower = h.toLowerCase().trim();
-    for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
-      if (!mapping[field] && aliases.some(a => lower === a || lower.includes(a))) {
-        mapping[field] = i;
+    const lower = h.toLowerCase().trim().replace(/[_\-]/g, ' ');
+    for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
+      if (map[field] !== undefined) continue;
+      if (aliases.some(a => lower === a || lower.includes(a))) {
+        map[field] = i;
       }
     }
   });
-  return mapping;
+  return map;
+}
+
+function detectByValues(headers, rows, existing) {
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const PHONE_RE = /^[\d\s()+\-.]{7,20}$/;
+  const URL_RE   = /^https?:\/\//i;
+  const LI_RE    = /linkedin\.com/i;
+  const RATING_RE = /^[0-5](\.\d+)?$/;
+  const INT_RE    = /^\d{1,6}$/;
+
+  const used = new Set(Object.values(existing));
+  const result = { ...existing };
+
+  headers.forEach((h, i) => {
+    if (used.has(i)) return;
+    const samples = rows.slice(0, 10).map(r => (r[i] || '').trim()).filter(Boolean).slice(0, 5);
+    if (!samples.length) return;
+
+    if (!result.linkedinUrl && samples.some(v => LI_RE.test(v))) { result.linkedinUrl = i; used.add(i); return; }
+    if (!result.email && samples.filter(v => EMAIL_RE.test(v)).length >= samples.length * 0.7) { result.email = i; used.add(i); return; }
+    if (!result.website && samples.filter(v => URL_RE.test(v)).length >= samples.length * 0.6) { result.website = i; used.add(i); return; }
+    if (!result.phone && samples.filter(v => PHONE_RE.test(v) && v.replace(/\D/g,'').length >= 7).length >= samples.length * 0.7) { result.phone = i; used.add(i); return; }
+    if (!result.rating && samples.every(v => RATING_RE.test(v))) { result.rating = i; used.add(i); return; }
+    if (!result.reviewCount && samples.every(v => INT_RE.test(v)) && samples.some(v => parseInt(v) > 5)) { result.reviewCount = i; used.add(i); return; }
+  });
+
+  return result;
+}
+
+// ── CSV parser ───────────────────────────────────────────────────────────────
+function parseLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      result.push(cur.trim()); cur = '';
+    } else cur += ch;
+  }
+  result.push(cur.trim());
+  return result;
 }
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return { headers: [], rows: [] };
-
-  function parseLine(line) {
-    const result = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
-        else inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        result.push(cur.trim()); cur = '';
-      } else {
-        cur += ch;
-      }
-    }
-    result.push(cur.trim());
-    return result;
-  }
-
   const headers = parseLine(lines[0]);
   const rows = lines.slice(1).filter(l => l.trim()).map(parseLine);
   return { headers, rows };
 }
 
-function rowsToLeads(rows, headers, colMap, defaultVertical) {
-  const knownVerticals = Object.keys(VERTICAL_LABELS);
-  return rows.map(row => {
-    const get = (field) => colMap[field] !== undefined ? (row[colMap[field]] || '').trim() : '';
+// ── Row conversion ───────────────────────────────────────────────────────────
+function rowToLead(row, colMap, defaultVertical) {
+  const get = f => (colMap[f] !== undefined && colMap[f] !== null) ? (row[colMap[f]] || '').trim() : '';
 
-    // City + state resolution
-    let city = get('city');
-    let state = get('state');
+  let city = get('city'), state = get('state');
 
-    if (colMap.cityState !== undefined) {
-      // dedicated "city/state" or "location" column like "Charlotte, NC"
-      const parsed = splitCityState(get('cityState'));
-      if (!city) city = parsed.city;
-      if (!state) state = parsed.state;
-    } else if (!state && city) {
-      // try to extract state from the city field itself
-      const parsed = splitCityState(city);
-      city = parsed.city;
-      state = parsed.state;
+  if (colMap.cityState !== undefined && (!city || !state)) {
+    const p = splitCityState(get('cityState'));
+    if (!city) city = p.city;
+    if (!state) state = p.state;
+  }
+
+  // Try to extract city/state from full address if still missing
+  if ((!city || !state) && colMap.address !== undefined) {
+    const p = cityStateFromAddress(get('address'));
+    if (p) { if (!city) city = p.city; if (!state) state = p.state; }
+  }
+
+  // Try treating city field as "City, ST" combo
+  if (city && !state) {
+    const p = splitCityState(city);
+    city = p.city; state = p.state;
+  }
+
+  state = normalizeState(state);
+
+  // Vertical: try exact mapping first, then pattern match
+  const rawV = get('vertical').toLowerCase().replace(/[\s\-]/g, '');
+  let vertical = Object.keys(VERTICAL_LABELS).find(v => v === rawV) || defaultVertical;
+  if (vertical === defaultVertical && colMap.vertical !== undefined) {
+    const vRaw = get('vertical');
+    for (const [v, re] of Object.entries(VERTICAL_PATTERNS)) {
+      if (re.test(vRaw)) { vertical = v; break; }
     }
+  }
 
-    state = normalizeState(state);
+  // Status
+  const rawStatus = get('status').toLowerCase().trim();
+  const status = VALID_STATUSES.has(get('status')) ? get('status')
+    : STATUS_NORMALIZE[rawStatus] || 'New';
 
-    const rawVertical = (get('vertical') || defaultVertical).toLowerCase().replace(/[\s-]/g, '');
-    const vertical = knownVerticals.includes(rawVertical) ? rawVertical : defaultVertical;
+  const email = get('email') || null;
+  const website = (() => {
+    const w = get('website');
+    if (!w) return null;
+    return /^https?:\/\//i.test(w) ? w : `https://${w}`;
+  })();
 
-    return {
-      name:        get('name') || 'Unknown Business',
-      city,
-      state,
-      address:     get('address') || '',
-      phone:       get('phone') || null,
-      website:     get('website') || null,
-      email:       get('email') || null,
-      emailSource: get('email') ? 'csv' : null,
-      rating:      parseFloat(get('rating')) || null,
-      reviewCount: parseInt(get('reviewCount')) || 0,
-      vertical,
-    };
-  }).filter(l => l.name && l.name !== 'Unknown Business');
+  return {
+    name:        get('name') || null,
+    city,
+    state,
+    address:     get('address') || null,
+    zip:         get('zip') || null,
+    phone:       get('phone') || null,
+    website,
+    email,
+    emailSource: email ? 'csv' : null,
+    rating:      parseFloat(get('rating')) || null,
+    reviewCount: parseInt(get('reviewCount')) || 0,
+    vertical,
+    linkedinUrl: get('linkedinUrl') || null,
+    notes:       get('notes') || null,
+    status,
+  };
 }
 
-// Fields shown in the detected-columns badge row
-const BADGE_FIELDS = ['name','city','state','address','phone','website','email','rating','reviewCount','vertical'];
+function rowsToLeads(rows, colMap, defaultVertical) {
+  return rows
+    .map(r => rowToLead(r, colMap, defaultVertical))
+    .filter(l => l.name);
+}
 
+// ── Component ────────────────────────────────────────────────────────────────
 export default function CsvImportModal({ onClose, onImport }) {
   const [step, setStep] = useState('upload');
   const [dragOver, setDragOver] = useState(false);
@@ -139,59 +258,70 @@ export default function CsvImportModal({ onClose, onImport }) {
   const [defaultVertical, setDefaultVertical] = useState('hvac');
   const [error, setError] = useState(null);
   const [importCount, setImportCount] = useState(0);
+  const [showMapping, setShowMapping] = useState(false);
   const fileRef = useRef();
 
   function handleFile(file) {
-    if (!file || !file.name.endsWith('.csv')) {
-      setError('Please upload a .csv file');
-      return;
-    }
+    if (!file || !file.name.endsWith('.csv')) { setError('Please upload a .csv file'); return; }
     setError(null);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       const { headers, rows } = parseCSV(e.target.result);
       if (!headers.length) { setError('Could not parse CSV — is the file empty?'); return; }
-      const detected = detectColumns(headers);
+      const byName = detectByName(headers);
+      const byVal  = detectByValues(headers, rows, byName);
       setParsed({ headers, rows });
-      setColMap(detected);
+      setColMap(byVal);
+      setShowMapping(false);
       setStep('preview');
     };
     reader.readAsText(file);
   }
 
-  const onDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragOver(false);
+  const onDrop = useCallback(e => {
+    e.preventDefault(); setDragOver(false);
     handleFile(e.dataTransfer.files[0]);
   }, []);
 
+  function fieldForCol(colIdx) {
+    return Object.entries(colMap).find(([, i]) => i === colIdx)?.[0] || '';
+  }
+
+  function setColMapping(colIdx, newField) {
+    setColMap(prev => {
+      const next = { ...prev };
+      Object.entries(next).forEach(([f, i]) => { if (i === colIdx) delete next[f]; });
+      if (newField && next[newField] !== undefined) delete next[newField];
+      if (newField) next[newField] = colIdx;
+      return next;
+    });
+  }
+
   async function handleImport() {
     setStep('importing');
-    const leads = rowsToLeads(parsed.rows, parsed.headers, colMap, defaultVertical);
+    const leads = rowsToLeads(parsed.rows, colMap, defaultVertical);
     try {
       const result = await onImport(leads);
-      setImportCount(result.imported);
+      setImportCount(result.imported || result.leads?.length || leads.length);
       setStep('done');
     } catch (err) {
-      setError(err.message);
-      setStep('preview');
+      setError(err.message); setStep('preview');
     }
   }
 
-  const previewLeads = parsed
-    ? rowsToLeads(parsed.rows.slice(0, 5), parsed.headers, colMap, defaultVertical)
-    : [];
+  const previewLeads = parsed ? rowsToLeads(parsed.rows.slice(0, 5), colMap, defaultVertical) : [];
+  const detectedFields = Object.keys(colMap);
+  const missedName = colMap.name === undefined;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 700 }} onClick={e => e.stopPropagation()}>
-
+      <div className="modal" style={{ maxWidth: 740 }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div className="modal-title" style={{ margin: 0 }}>Import CSV</div>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
 
-        {/* UPLOAD */}
+        {/* ── UPLOAD ── */}
         {step === 'upload' && (
           <>
             <div
@@ -202,15 +332,15 @@ export default function CsvImportModal({ onClose, onImport }) {
               style={{
                 border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`,
                 borderRadius: 8, padding: '48px 24px', textAlign: 'center', cursor: 'pointer',
-                background: dragOver ? 'var(--accent-dim)' : 'var(--bg)', transition: 'all 0.15s', marginBottom: 16,
+                background: dragOver ? 'rgba(251,191,36,0.05)' : 'var(--bg)', transition: 'all 0.15s', marginBottom: 16,
               }}
             >
               <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
               <div style={{ fontSize: 14, color: 'var(--text)', marginBottom: 4, fontWeight: 500 }}>
-                Drop a CSV file here, or click to browse
+                Drop a CSV here, or click to browse
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Supports exports from Google Maps, Outscraper, Apollo, or any spreadsheet
+                Auto-detects columns from Google Maps, Outscraper, Apollo, Yelp, or any spreadsheet
               </div>
               <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }}
                 onChange={e => handleFile(e.target.files[0])} />
@@ -219,20 +349,78 @@ export default function CsvImportModal({ onClose, onImport }) {
             <div className="alert alert-info" style={{ fontSize: 12 }}>
               <span>💡</span>
               <div>
-                Columns are auto-detected by name. Useful headers: <code>Name</code>, <code>City</code>, <code>State</code>,{' '}
-                <code>Website</code>, <code>Phone</code>, <code>Email</code>, <code>Rating</code>, <code>Reviews</code>.{' '}
-                A combined <code>City/State</code> column like <em>"Charlotte, NC"</em> also works.
+                <strong>Detected automatically:</strong> Business Name, Phone, City, State, Website, Email, Rating, Review Count, Vertical, LinkedIn, Notes, Status.
+                Column headers don't need to match exactly — common variations are recognized. You can also fix any mapping after upload.
               </div>
             </div>
-
             {error && <div className="alert alert-error" style={{ marginTop: 10 }}>{error}</div>}
           </>
         )}
 
-        {/* PREVIEW */}
+        {/* ── PREVIEW + MAPPING ── */}
         {step === 'preview' && parsed && (
           <>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
+            {/* Detected fields badges */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="form-label" style={{ marginBottom: 0 }}>
+                  Auto-detected {detectedFields.length} of {FIELD_OPTIONS.length - 1} fields
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowMapping(m => !m)}
+                  style={{ fontSize: 11 }}>
+                  {showMapping ? 'Hide' : 'Fix column mapping'} ↕
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {FIELD_OPTIONS.slice(1).map(({ value, label }) => {
+                  const detected = colMap[value] !== undefined
+                    || (value === 'city'  && colMap.cityState !== undefined)
+                    || (value === 'state' && colMap.cityState !== undefined);
+                  return (
+                    <span key={value} style={{
+                      fontSize: 11, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 3,
+                      background: detected ? 'rgba(29,185,84,0.12)' : 'var(--bg)',
+                      border: `1px solid ${detected ? 'rgba(29,185,84,0.3)' : 'var(--border)'}`,
+                      color: detected ? 'var(--green)' : 'var(--text-dim)',
+                    }}>
+                      {detected ? '✓' : '–'} {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Column mapping override UI */}
+            {showMapping && (
+              <div style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg)', padding: '8px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
+                  Column Mapping — {parsed.headers.length} columns detected
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {parsed.headers.map((h, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px', borderBottom: '1px solid var(--border)', background: fieldForCol(i) ? 'rgba(29,185,84,0.04)' : 'transparent' }}>
+                      <div style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {h || `Column ${i + 1}`}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', fontStyle: 'italic', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {parsed.rows[0]?.[i] || '—'}
+                      </div>
+                      <select
+                        className="form-select"
+                        value={fieldForCol(i)}
+                        onChange={e => setColMapping(i, e.target.value)}
+                        style={{ width: 180, fontSize: 11, padding: '3px 6px' }}
+                      >
+                        {FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Default vertical + row count */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 14, flexWrap: 'wrap' }}>
               <div>
                 <div className="form-label">Default vertical</div>
                 <select className="form-select" style={{ width: 160 }} value={defaultVertical} onChange={e => setDefaultVertical(e.target.value)}>
@@ -240,77 +428,60 @@ export default function CsvImportModal({ onClose, onImport }) {
                 </select>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', paddingBottom: 6 }}>
-                Applied to rows without a detectable vertical.
+                Used for rows without a detectable category.
               </div>
             </div>
 
-            <div style={{ marginBottom: 14 }}>
-              <div className="form-label" style={{ marginBottom: 6 }}>Detected columns</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {BADGE_FIELDS.map(field => {
-                  const detected = colMap[field] !== undefined || (field === 'city' && colMap.cityState !== undefined) || (field === 'state' && colMap.cityState !== undefined);
-                  return (
-                    <span key={field} style={{
-                      fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 8px', borderRadius: 3,
-                      background: detected ? 'rgba(29,185,84,0.12)' : 'var(--bg)',
-                      border: `1px solid ${detected ? 'rgba(29,185,84,0.3)' : 'var(--border)'}`,
-                      color: detected ? 'var(--green)' : 'var(--text-dim)',
-                    }}>
-                      {detected ? '✓' : '–'} {field}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
+            {/* Preview table */}
             <div className="form-label" style={{ marginBottom: 6 }}>
-              Preview — first 5 of {parsed.rows.length} rows
+              Preview — first {Math.min(5, parsed.rows.length)} of {parsed.rows.length} rows
             </div>
-            <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 5 }}>
+            <div className="table-wrap" style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 14, border: '1px solid var(--border)', borderRadius: 5 }}>
               <table>
                 <thead>
                   <tr>
                     <th>Name</th>
-                    <th>City</th>
-                    <th>State</th>
-                    <th>Vertical</th>
-                    <th>Website</th>
+                    <th>Phone</th>
+                    <th>Location</th>
+                    <th>Rating</th>
                     <th>Email</th>
+                    <th>Vertical</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewLeads.map((l, i) => (
                     <tr key={i}>
-                      <td style={{ fontWeight: 500, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{l.city || '—'}</td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>{l.state || '—'}</td>
-                      <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{l.vertical}</td>
-                      <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.website || '—'}</td>
-                      <td style={{ fontSize: 11, color: l.email ? 'var(--green)' : 'var(--text-dim)' }}>{l.email || '—'}</td>
+                      <td style={{ fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{l.name}</td>
+                      <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{l.phone || '—'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{[l.city, l.state].filter(Boolean).join(', ') || '—'}</td>
+                      <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{l.rating ? `⭐ ${l.rating}` : '—'}</td>
+                      <td style={{ fontSize: 11, color: l.email ? 'var(--green)' : 'var(--text-dim)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.email || '—'}</td>
+                      <td style={{ fontSize: 10, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{l.vertical}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.status}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
-
-            {!colMap.name && (
+            {missedName && (
               <div className="alert alert-warning" style={{ marginBottom: 12, fontSize: 12 }}>
-                Could not detect a "Name" column. Make sure your CSV has a column called Name, Business, or Company.
+                Could not detect a Name column. Use "Fix column mapping" above to assign one, or make sure your CSV has a column called Name, Business, or Company.
               </div>
             )}
+            {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => { setStep('upload'); setParsed(null); setError(null); }}>← Back</button>
-              <button className="btn btn-primary" onClick={handleImport}>
+              <button className="btn btn-primary" onClick={handleImport} disabled={missedName}>
                 Import {parsed.rows.length} leads
               </button>
             </div>
           </>
         )}
 
-        {/* IMPORTING */}
+        {/* ── IMPORTING ── */}
         {step === 'importing' && (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
@@ -318,7 +489,7 @@ export default function CsvImportModal({ onClose, onImport }) {
           </div>
         )}
 
-        {/* DONE */}
+        {/* ── DONE ── */}
         {step === 'done' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
@@ -326,7 +497,7 @@ export default function CsvImportModal({ onClose, onImport }) {
               {importCount} leads imported
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
-              Missed revenue auto-calculated for every lead.
+              Missed revenue auto-calculated. Follow-up sequence ready to start.
             </div>
             <button className="btn btn-primary" onClick={onClose}>View in CRM</button>
           </div>
