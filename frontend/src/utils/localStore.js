@@ -70,7 +70,13 @@ export const localStore = {
   updateLead(id, updates) {
     const leads = readLeads();
     const idx = leads.findIndex(l => l.id === id);
-    if (idx === -1) return Promise.reject(new Error('Not found'));
+    if (idx === -1) {
+      // Lead came from backend — store it locally so future updates work
+      const lead = { id, status: 'New', createdAt: new Date().toISOString(), ...updates };
+      leads.push(lead);
+      writeLeads(leads);
+      return Promise.resolve(lead);
+    }
     leads[idx] = { ...leads[idx], ...updates };
     writeLeads(leads);
     return Promise.resolve(leads[idx]);

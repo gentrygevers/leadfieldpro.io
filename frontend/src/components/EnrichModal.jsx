@@ -41,16 +41,24 @@ export default function EnrichModal({ lead, onClose, onUpdate }) {
 
   async function saveEmail() {
     if (!foundEmail) return;
-    const updated = await api.updateLead(lead.id, { email: foundEmail, emailSource: foundEmailSource || 'manual' });
-    onUpdate?.(updated);
-    setEmailStatus('found');
+    try {
+      const updated = await api.updateLead(lead.id, { email: foundEmail, emailSource: foundEmailSource || 'manual' });
+      onUpdate?.(updated);
+      setEmailStatus('found');
+    } catch {
+      setEmailStatus('error');
+    }
   }
 
   async function saveLinkedIn() {
-    const updated = await api.updateLead(lead.id, { linkedinUrl });
-    onUpdate?.(updated);
-    setLinkedinSaved(true);
-    setTimeout(() => setLinkedinSaved(false), 2000);
+    try {
+      const updated = await api.updateLead(lead.id, { linkedinUrl });
+      onUpdate?.(updated);
+      setLinkedinSaved(true);
+      setTimeout(() => setLinkedinSaved(false), 2000);
+    } catch {
+      // silently ignore — URL is still saved in the input field
+    }
   }
 
   async function refreshReviews() {

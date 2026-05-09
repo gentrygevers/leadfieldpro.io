@@ -11,8 +11,6 @@ export default function CRM() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQ, setSearchQ] = useState('');
   const [selected, setSelected] = useState(new Set());
-  const [findingEmail, setFindingEmail] = useState(new Set());
-  const [batchFinding, setBatchFinding] = useState(false);
   const [pitchModal, setPitchModal] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [enrichLead, setEnrichLead] = useState(null);
@@ -31,38 +29,6 @@ export default function CRM() {
     setLoading(true);
     fetchLeads().finally(() => setLoading(false));
   }, [fetchLeads]);
-
-  async function handleFindEmail(lead) {
-    setFindingEmail(prev => new Set([...prev, lead.id]));
-    try {
-      const result = await api.findEmail(lead.id);
-      setLeads(prev => prev.map(l => l.id === lead.id ? result.lead : l));
-    } catch (err) {
-      alert('Error finding email: ' + err.message);
-    } finally {
-      setFindingEmail(prev => { const s = new Set(prev); s.delete(lead.id); return s; });
-    }
-  }
-
-  async function handleBatchFind() {
-    const ids = [...selected].filter(id => {
-      const l = leads.find(x => x.id === id);
-      return l && !l.email;
-    });
-    if (!ids.length) return;
-    setBatchFinding(true);
-    try {
-      const result = await api.findEmailsBatch(ids);
-      const updatedMap = {};
-      result.results.forEach(r => { if (r.lead) updatedMap[r.id] = r.lead; });
-      setLeads(prev => prev.map(l => updatedMap[l.id] ? updatedMap[l.id] : l));
-    } catch (err) {
-      alert('Batch error: ' + err.message);
-    } finally {
-      setBatchFinding(false);
-      setSelected(new Set());
-    }
-  }
 
   async function handleStatusChange(lead, newStatus) {
     try {
@@ -111,8 +77,6 @@ export default function CRM() {
     else setSelected(new Set(leads.map(l => l.id)));
   }
 
-  const selectedWithoutEmail = [...selected].filter(id => { const l = leads.find(x => x.id === id); return l && !l.email; }).length;
-
   return (
     <div className="page">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -158,15 +122,6 @@ export default function CRM() {
           <option value="All">All Statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        {selected.size > 0 && (
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleBatchFind}
-            disabled={batchFinding || selectedWithoutEmail === 0}
-          >
-            {batchFinding ? <><span className="spinner" /> Finding...</> : <><EmailIcon /> Find {selectedWithoutEmail} emails</>}
-          </button>
-        )}
         <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {leads.length} leads
         </span>
