@@ -219,16 +219,16 @@ export default function CRM() {
                       {lead.email ? (
                         <span style={{ fontSize: '12px' }}>
                           {lead.email}
-                          <span className={sourceTagClass(lead.emailSource)}>{lead.emailSource}</span>
+                          {lead.emailSource && <span className={sourceTagClass(lead.emailSource)}>{lead.emailSource}</span>}
                         </span>
                       ) : (
                         <button
                           className="btn btn-ghost btn-sm"
-                          onClick={() => handleFindEmail(lead)}
-                          disabled={findingEmail.has(lead.id)}
-                          style={{ padding: '3px 8px', fontSize: '11px' }}
+                          onClick={() => setEnrichLead(lead)}
+                          style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--text-muted)' }}
+                          title="Click ⚡ Enrich to find email"
                         >
-                          {findingEmail.has(lead.id) ? <span className="spinner" /> : <><EmailIcon /> Find</>}
+                          <EmailIcon /> Find
                         </button>
                       )}
                     </td>
