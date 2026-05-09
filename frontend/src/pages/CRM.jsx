@@ -1,9 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api, STATUSES, VERTICAL_LABELS, formatMoney, sourceTagClass } from '../utils/api';
-import { buildPitchEmail, buildGmailUrl } from '../utils/pitch';
+import { buildEmailForStage, buildGmailUrl, advanceSequence, SEQUENCE_LABELS } from '../utils/pitch';
 import CsvImportModal from '../components/CsvImportModal';
 import EnrichModal from '../components/EnrichModal';
 import { isLocalMode } from '../utils/localStore';
+
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function daysLabel(dateStr) {
+  const diff = Math.round((new Date(dateStr) - new Date(TODAY)) / 86400000);
+  if (diff < 0) return `${Math.abs(diff)}d overdue`;
+  if (diff === 0) return 'Due today';
+  return `in ${diff}d`;
+}
+
+function isDue(dateStr) {
+  return dateStr && dateStr <= TODAY;
+}
 
 export default function CRM() {
   const [leads, setLeads] = useState([]);
@@ -33,6 +46,11 @@ export default function CRM() {
     fetchLeads().finally(() => setLoading(false));
   }, [fetchLeads]);
 
+  // Leads due for follow-up (overdue or today), not complete, not closed
+  const followUpQueue = leads
+    .filter(l => l.followUpDate && isDue(l.followUpDate) && (l.followUpStage || 0) < 4 && l.status !== 'Closed')
+    .sort((a, b) => a.followUpDate < b.followUpDate ? -1 : 1);
+
   function handleSort(col) {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortBy(col); setSortDir('desc'); }
@@ -44,13 +62,14 @@ export default function CRM() {
   });
 
   function exportCsv() {
-    const headers = ['Name', 'Phone', 'City', 'State', 'Vertical', 'Website', 'Email', 'Email Source', 'Rating', 'Reviews', 'Monthly Gap', 'Status', 'LinkedIn', 'Notes'];
+    const headers = ['Name', 'Phone', 'City', 'State', 'Vertical', 'Website', 'Email', 'Email Source', 'Rating', 'Reviews', 'Monthly Gap', 'Status', 'Follow-up Stage', 'Next Follow-up', 'LinkedIn', 'Notes'];
     const rows = leads.map(l => [
       l.name, l.phone, l.city, l.state,
       VERTICAL_LABELS[l.vertical] || l.vertical,
       l.website, l.email, l.emailSource,
       l.rating, l.reviewCount, l.missedRevenue,
-      l.status, l.linkedinUrl, l.notes
+      l.status, SEQUENCE_LABELS[l.followUpStage || 0], l.followUpDate,
+      l.linkedinUrl, l.notes,
     ]);
     const csv = [headers, ...rows]
       .map(r => r.map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(','))
@@ -59,16 +78,50 @@ export default function CRM() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `leads-${TODAY}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  async function handleStatusChange(lead, newStatus) {
+  async function updateLead(id, updates) {
     try {
-      const updated = await api.updateLead(lead.id, { status: newStatus });
-      setLeads(prev => prev.map(l => l.id === lead.id ? updated : l));
+      const updated = await api.updateLead(id, updates);
+      setLeads(prev => prev.map(l => l.id === id ? updated : l));
+      return updated;
     } catch {}
+  }
+
+  // One-click: opens Gmail with stage-appropriate template, advances sequence
+  async function handleSequenceSend(lead) {
+    const { subject, body } = buildEmailForStage(lead);
+    window.open(buildGmailUrl(lead.email, subject, body), '_blank');
+    const seq = advanceSequence(lead);
+    await updateLead(lead.id, {
+      ...seq,
+      status: ['New', 'Researching'].includes(lead.status) ? 'Contacted' : lead.status,
+    });
+    setPitchModal(null);
+  }
+
+  async function handleSnooze(lead, days = 3) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    await updateLead(lead.id, { followUpDate: d.toISOString().slice(0, 10) });
+  }
+
+  async function handleMarkSentOther(lead) {
+    const seq = advanceSequence(lead);
+    await updateLead(lead.id, { ...seq, status: 'Contacted' });
+    setPitchModal(null);
+  }
+
+  function openPitch(lead) {
+    const { subject, body } = buildEmailForStage(lead);
+    setPitchModal({ lead, subject, body });
+  }
+
+  async function handleStatusChange(lead, newStatus) {
+    await updateLead(lead.id, { status: newStatus });
   }
 
   async function handleDelete(lead) {
@@ -79,36 +132,18 @@ export default function CRM() {
     } catch {}
   }
 
-  function openPitch(lead) {
-    const { subject, body } = buildPitchEmail(lead);
-    setPitchModal({ lead, subject, body });
-  }
-
   async function handleImportLeads(newLeads) {
     const result = await api.importLeads(newLeads);
     await fetchLeads();
     return result;
   }
 
-  async function markSent(lead) {
-    try {
-      const updated = await api.updateLead(lead.id, { status: 'Contacted' });
-      setLeads(prev => prev.map(l => l.id === lead.id ? updated : l));
-    } catch {}
-    setPitchModal(null);
-  }
-
   function toggleSelect(id) {
-    setSelected(prev => {
-      const s = new Set(prev);
-      if (s.has(id)) s.delete(id); else s.add(id);
-      return s;
-    });
+    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   }
 
   function toggleAll() {
-    if (selected.size === leads.length) setSelected(new Set());
-    else setSelected(new Set(leads.map(l => l.id)));
+    setSelected(selected.size === leads.length ? new Set() : new Set(leads.map(l => l.id)));
   }
 
   function SortArrow({ col }) {
@@ -142,13 +177,65 @@ export default function CRM() {
         </div>
       )}
 
+      {/* ── TODAY'S FOLLOW-UP QUEUE ── */}
+      {followUpQueue.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--accent)', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 16 }}>📅</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--accent)' }}>
+              Follow-ups Due — {followUpQueue.length} {followUpQueue.length === 1 ? 'lead' : 'leads'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {followUpQueue.map((lead, i) => (
+              <div key={lead.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 0',
+                borderBottom: i < followUpQueue.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 3 }}>{lead.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 10 }}>
+                    <span>{[lead.city, lead.state].filter(Boolean).join(', ')}</span>
+                    <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                      {SEQUENCE_LABELS[lead.followUpStage || 0]}
+                    </span>
+                    <span style={{ color: isDue(lead.followUpDate) && lead.followUpDate < TODAY ? 'var(--red)' : 'var(--text-muted)' }}>
+                      {daysLabel(lead.followUpDate)}
+                    </span>
+                    {lead.phone && <a href={`tel:${lead.phone}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>{lead.phone}</a>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {lead.email ? (
+                    <button className="btn btn-primary btn-sm" onClick={() => handleSequenceSend(lead)}>
+                      <GmailIcon /> Open in Gmail
+                    </button>
+                  ) : (
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEnrichLead(lead)}>
+                      Find Email First
+                    </button>
+                  )}
+                  <button className="btn btn-secondary btn-sm" onClick={() => handleSnooze(lead, 3)} title="Push back 3 days">
+                    Snooze 3d
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleSnooze(lead, 7)} title="Push back 7 days">
+                    7d
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Pipeline steps */}
       <div className="pipeline">
         {STATUSES.map((s, i) => (
           <React.Fragment key={s}>
-            <div className={`pipeline-step${statusFilter === s ? ' active' : ''}`} onClick={() => setStatusFilter(statusFilter === s ? 'All' : s)} style={{ cursor: 'pointer' }}>
-              <div className="pipeline-dot" />
-              {s}
+            <div className={`pipeline-step${statusFilter === s ? ' active' : ''}`}
+              onClick={() => setStatusFilter(statusFilter === s ? 'All' : s)} style={{ cursor: 'pointer' }}>
+              <div className="pipeline-dot" />{s}
             </div>
             {i < STATUSES.length - 1 && <span className="pipeline-arrow">→</span>}
           </React.Fragment>
@@ -157,12 +244,7 @@ export default function CRM() {
 
       {/* Filter bar */}
       <div className="filter-bar">
-        <input
-          className="form-input"
-          placeholder="Search name or city..."
-          value={searchQ}
-          onChange={e => setSearchQ(e.target.value)}
-        />
+        <input className="form-input" placeholder="Search name or city..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
         <select className="form-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="All">All Statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -203,69 +285,82 @@ export default function CRM() {
                 </tr>
               </thead>
               <tbody>
-                {sortedLeads.map(lead => (
-                  <tr key={lead.id}>
-                    <td><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} /></td>
-                    <td>
-                      <div style={{ fontWeight: 500, fontSize: '13px' }}>{lead.name}</div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                        {lead.website && <a href={lead.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>↗ website</a>}
-                        {lead.linkedinUrl && <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>in/ linkedin</a>}
-                      </div>
-                    </td>
-                    <td>
-                      {lead.phone
-                        ? <a href={`tel:${lead.phone}`} style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>{lead.phone}</a>
-                        : <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>—</span>
-                      }
-                    </td>
-                    <td style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {[lead.city, lead.state].filter(Boolean).join(', ') || '—'}
-                    </td>
-                    <td className="td-mono">{lead.rating ? `⭐ ${lead.rating}` : '—'}</td>
-                    <td>
-                      {lead.email ? (
-                        <div>
-                          <span style={{ fontSize: '12px' }}>{lead.email}</span>
-                          {lead.emailSource && <span className={sourceTagClass(lead.emailSource)}>{lead.emailSource}</span>}
+                {sortedLeads.map(lead => {
+                  const due = lead.followUpDate && isDue(lead.followUpDate) && (lead.followUpStage || 0) < 4;
+                  const seqDone = (lead.followUpStage || 0) >= 4;
+                  return (
+                    <tr key={lead.id} style={due ? { background: 'rgba(251,191,36,0.04)' } : {}}>
+                      <td><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} /></td>
+                      <td>
+                        <div style={{ fontWeight: 500, fontSize: '13px' }}>{lead.name}</div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                          {lead.website && <a href={lead.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>↗ website</a>}
+                          {lead.linkedinUrl && <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>in/ linkedin</a>}
                         </div>
-                      ) : (
-                        <button className="btn btn-ghost btn-sm" onClick={() => setEnrichLead(lead)}
-                          style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                          <EmailIcon /> Find
-                        </button>
-                      )}
-                    </td>
-                    <td className="td-mono" style={{ color: 'var(--accent)' }}>{formatMoney(lead.missedRevenue)}/mo</td>
-                    <td>
-                      <select className="form-select" value={lead.status}
-                        onChange={e => handleStatusChange(lead, e.target.value)}
-                        style={{ width: '120px', padding: '4px 8px', fontSize: '11px' }}>
-                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setEnrichLead(lead)} title="Enrich">
-                          <EnrichIcon />
-                        </button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setNotesLead(lead)}
-                          title={lead.notes ? 'View notes' : 'Add notes'}
-                          style={{ position: 'relative' }}>
-                          <NotesIcon />
-                          {lead.notes && <span style={{ position: 'absolute', top: 2, right: 2, width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'block' }} />}
-                        </button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openPitch(lead)}
-                          disabled={!lead.email} title={lead.email ? 'Send pitch' : 'Find email first'}>
-                          <SendIcon />
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(lead)}>
-                          <TrashIcon />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        {lead.phone
+                          ? <a href={`tel:${lead.phone}`} style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>{lead.phone}</a>
+                          : <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {[lead.city, lead.state].filter(Boolean).join(', ') || '—'}
+                      </td>
+                      <td className="td-mono">{lead.rating ? `⭐ ${lead.rating}` : '—'}</td>
+                      <td>
+                        {lead.email ? (
+                          <div>
+                            <span style={{ fontSize: '12px' }}>{lead.email}</span>
+                            {lead.emailSource && <span className={sourceTagClass(lead.emailSource)}>{lead.emailSource}</span>}
+                          </div>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEnrichLead(lead)}
+                            style={{ padding: '3px 8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                            <EmailIcon /> Find
+                          </button>
+                        )}
+                      </td>
+                      <td className="td-mono" style={{ color: 'var(--accent)' }}>{formatMoney(lead.missedRevenue)}/mo</td>
+                      <td>
+                        <select className="form-select" value={lead.status}
+                          onChange={e => handleStatusChange(lead, e.target.value)}
+                          style={{ width: '120px', padding: '4px 8px', fontSize: '11px' }}>
+                          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        {/* Follow-up date indicator */}
+                        {lead.followUpDate && !seqDone && (
+                          <div style={{ fontSize: 10, marginTop: 4, fontFamily: 'var(--font-mono)', color: due ? 'var(--accent)' : 'var(--text-dim)' }}>
+                            📅 {SEQUENCE_LABELS[lead.followUpStage || 0]} · {daysLabel(lead.followUpDate)}
+                          </div>
+                        )}
+                        {seqDone && (
+                          <div style={{ fontSize: 10, marginTop: 4, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                            ✓ Sequence done
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEnrichLead(lead)} title="Enrich">
+                            <EnrichIcon />
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setNotesLead(lead)}
+                            title={lead.notes ? 'View notes' : 'Add notes'} style={{ position: 'relative' }}>
+                            <NotesIcon />
+                            {lead.notes && <span style={{ position: 'absolute', top: 2, right: 2, width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'block' }} />}
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => openPitch(lead)}
+                            disabled={!lead.email} title={lead.email ? `Send ${SEQUENCE_LABELS[lead.followUpStage || 0]}` : 'Find email first'}>
+                            <SendIcon />
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(lead)}>
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -274,38 +369,34 @@ export default function CRM() {
 
       {/* Enrich modal */}
       {enrichLead && (
-        <EnrichModal
-          lead={enrichLead}
-          onClose={() => setEnrichLead(null)}
-          onUpdate={updated => {
-            setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
-            setEnrichLead(updated);
-          }}
-        />
+        <EnrichModal lead={enrichLead} onClose={() => setEnrichLead(null)}
+          onUpdate={updated => { setLeads(prev => prev.map(l => l.id === updated.id ? updated : l)); setEnrichLead(updated); }} />
       )}
 
       {/* Notes modal */}
       {notesLead && (
-        <NotesModal
-          lead={notesLead}
-          onClose={() => setNotesLead(null)}
-          onSave={updated => {
-            setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
-            setNotesLead(null);
-          }}
-        />
+        <NotesModal lead={notesLead} onClose={() => setNotesLead(null)}
+          onSave={updated => { setLeads(prev => prev.map(l => l.id === updated.id ? updated : l)); setNotesLead(null); }} />
       )}
 
       {/* CSV import modal */}
-      {showImport && (
-        <CsvImportModal onClose={() => setShowImport(false)} onImport={handleImportLeads} />
-      )}
+      {showImport && <CsvImportModal onClose={() => setShowImport(false)} onImport={handleImportLeads} />}
 
-      {/* Pitch modal */}
+      {/* Pitch / follow-up modal */}
       {pitchModal && (
         <div className="modal-overlay" onClick={() => setPitchModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Send Pitch — {pitchModal.lead.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div className="modal-title" style={{ margin: 0 }}>
+                {SEQUENCE_LABELS[pitchModal.lead.followUpStage || 0]} — {pitchModal.lead.name}
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setPitchModal(null)}>✕</button>
+            </div>
+            {(pitchModal.lead.followUpStage || 0) > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 16 }}>
+                Stage {(pitchModal.lead.followUpStage || 0) + 1} of 4 · Next follow-up auto-schedules on send
+              </div>
+            )}
             <div className="modal-field">
               <label>To</label>
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--accent)' }}>{pitchModal.lead.email}</p>
@@ -320,10 +411,10 @@ export default function CRM() {
             </div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setPitchModal(null)}>Cancel</button>
-              <button className="btn btn-secondary" onClick={() => markSent(pitchModal.lead)}>Mark Sent</button>
-              <button className="btn btn-primary" onClick={() => {
-                window.open(buildGmailUrl(pitchModal.lead.email, pitchModal.subject, pitchModal.body), '_blank');
-              }}>
+              <button className="btn btn-secondary" onClick={() => handleMarkSentOther(pitchModal.lead)}>
+                Mark Sent (other)
+              </button>
+              <button className="btn btn-primary" onClick={() => handleSequenceSend(pitchModal.lead)}>
                 <GmailIcon /> Open in Gmail
               </button>
             </div>
@@ -343,11 +434,7 @@ function NotesModal({ lead, onClose, onSave }) {
     try {
       const updated = await api.updateLead(lead.id, { notes });
       onSave(updated);
-    } catch {
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+    } catch { onClose(); } finally { setSaving(false); }
   }
 
   return (
@@ -360,14 +447,10 @@ function NotesModal({ lead, onClose, onSave }) {
           </div>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
-        <textarea
-          className="form-input"
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
+        <textarea className="form-input" value={notes} onChange={e => setNotes(e.target.value)}
           placeholder="Call notes, follow-up reminders, anything relevant…"
           style={{ width: '100%', minHeight: 140, resize: 'vertical', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6 }}
-          autoFocus
-        />
+          autoFocus />
         <div className="modal-actions" style={{ marginTop: 12 }}>
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>

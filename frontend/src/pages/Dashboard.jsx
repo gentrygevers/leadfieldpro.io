@@ -24,6 +24,25 @@ export default function Dashboard() {
         <div className="page-sub">LSA gap intelligence overview</div>
       </div>
 
+      {stats?.followUpsDue > 0 && (
+        <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 22 }}>📅</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
+                {stats.followUpsDue} follow-up{stats.followUpsDue !== 1 ? 's' : ''} due today
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                Open the CRM to send with one click
+              </div>
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/crm')}>
+            Go to CRM →
+          </button>
+        </div>
+      )}
+
       <div className="stat-grid">
         <StatCard label="Total Leads" value={stats?.totalLeads ?? '—'} />
         <StatCard label="Emails Found" value={stats?.emailsFound ?? '—'} accent />

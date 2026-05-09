@@ -46,12 +46,14 @@ export const localStore = {
 
   getStats() {
     const leads = readLeads();
+    const today = new Date().toISOString().slice(0, 10);
     const totalMissedRevenue = leads.reduce((s, l) => s + (l.missedRevenue || 0), 0);
     const emailsFound = leads.filter(l => l.email).length;
     const emailsSent = leads.filter(l => ['Contacted','Replied','Qualified','Closed'].includes(l.status)).length;
+    const followUpsDue = leads.filter(l => l.followUpDate && l.followUpDate <= today && (l.followUpStage || 0) < 4 && l.status !== 'Closed').length;
     const statusCounts = {};
     leads.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
-    return Promise.resolve({ totalLeads: leads.length, emailsFound, emailsSent, totalMissedRevenue, statusCounts });
+    return Promise.resolve({ totalLeads: leads.length, emailsFound, emailsSent, totalMissedRevenue, followUpsDue, statusCounts });
   },
 
   addBatch(incoming) {

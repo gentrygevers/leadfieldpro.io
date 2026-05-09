@@ -19,12 +19,14 @@ router.get('/', (req, res) => {
 // GET /api/leads/stats/summary — must be before /:id
 router.get('/stats/summary', (req, res) => {
   const leads = leadsStore.getAll();
+  const today = new Date().toISOString().slice(0, 10);
   const totalMissedRevenue = leads.reduce((sum, l) => sum + (l.missedRevenue || 0), 0);
   const emailsFound = leads.filter(l => l.email).length;
   const emailsSent = leads.filter(l => ['Contacted', 'Replied', 'Qualified', 'Closed'].includes(l.status)).length;
+  const followUpsDue = leads.filter(l => l.followUpDate && l.followUpDate <= today && (l.followUpStage || 0) < 4 && l.status !== 'Closed').length;
   const statusCounts = {};
   leads.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
-  res.json({ totalLeads: leads.length, emailsFound, emailsSent, totalMissedRevenue, statusCounts });
+  res.json({ totalLeads: leads.length, emailsFound, emailsSent, totalMissedRevenue, followUpsDue, statusCounts });
 });
 
 // POST /api/leads/import — bulk import from CSV
