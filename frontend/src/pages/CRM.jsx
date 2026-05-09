@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api, STATUSES, VERTICAL_LABELS, formatMoney, statusBadgeClass, sourceTagClass } from '../utils/api';
 import { buildPitchEmail, buildGmailUrl } from '../utils/pitch';
+import CsvImportModal from '../components/CsvImportModal';
 
 export default function CRM() {
   const [leads, setLeads] = useState([]);
@@ -11,6 +12,7 @@ export default function CRM() {
   const [findingEmail, setFindingEmail] = useState(new Set());
   const [batchFinding, setBatchFinding] = useState(false);
   const [pitchModal, setPitchModal] = useState(null);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -79,6 +81,12 @@ export default function CRM() {
     setPitchModal({ lead, subject, body });
   }
 
+  async function handleImportLeads(leads) {
+    const result = await api.importLeads(leads);
+    await fetchLeads();
+    return result;
+  }
+
   async function markSent(lead) {
     try {
       const updated = await api.updateLead(lead.id, { status: 'Contacted' });
@@ -104,9 +112,14 @@ export default function CRM() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="page-title">CRM Pipeline</div>
-        <div className="page-sub">Manage and track your lead outreach</div>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div className="page-title">CRM Pipeline</div>
+          <div className="page-sub">Manage and track your lead outreach</div>
+        </div>
+        <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
+          <UploadIcon /> Import CSV
+        </button>
       </div>
 
       {/* Pipeline steps */}
@@ -240,6 +253,14 @@ export default function CRM() {
         )}
       </div>
 
+      {/* CSV import modal */}
+      {showImport && (
+        <CsvImportModal
+          onClose={() => setShowImport(false)}
+          onImport={handleImportLeads}
+        />
+      )}
+
       {/* Pitch modal */}
       {pitchModal && (
         <div className="modal-overlay" onClick={() => setPitchModal(null)}>
@@ -281,6 +302,7 @@ export default function CRM() {
   );
 }
 
+function UploadIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>; }
 function EmailIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>; }
 function SendIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>; }
 function TrashIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>; }
