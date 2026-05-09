@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { isLocalMode } from '../utils/localStore';
+
+const IS_PROD = !!import.meta.env.VITE_API_URL;
 
 export default function Settings() {
   const [health, setHealth] = useState(null);
@@ -46,8 +49,20 @@ export default function Settings() {
           </button>
         </div>
         {health === 'error' && (
-          <div className="alert alert-warning" style={{ marginTop: '12px' }}>
-            Make sure the backend is running at <code style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>http://localhost:3001</code> or set <code>VITE_API_URL</code> in your frontend env.
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="alert alert-info" style={{ fontSize: '12px' }}>
+              <span>✅</span>
+              <span><strong>Local mode is active</strong> — the app is fully functional. Leads, imports, and status updates are saved in your browser's localStorage.</span>
+            </div>
+            <div className="alert alert-warning" style={{ fontSize: '12px' }}>
+              <span>⚠️</span>
+              <div>
+                {IS_PROD
+                  ? <>Backend not reachable at <code style={{ fontFamily: 'var(--font-mono)' }}>{import.meta.env.VITE_API_URL}</code>. Deploy the backend to Railway and make sure it's running.</>
+                  : <>Backend not running locally. Start it with <code style={{ fontFamily: 'var(--font-mono)' }}>cd backend && node src/index.js</code>, or deploy to Railway for production.</>
+                }
+              </div>
+            </div>
           </div>
         )}
       </div>
