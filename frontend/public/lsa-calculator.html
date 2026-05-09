@@ -102,8 +102,8 @@
     .result-label { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
     .result-amount { font-family: var(--font-mono); font-size: 56px; font-weight: 500; color: var(--accent); line-height: 1; margin-bottom: 4px; }
     .result-period { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
-    .result-annual { font-family: var(--font-mono); font-size: 18px; color: var(--text-muted); margin-top: 12px; }
-    .result-annual span { color: var(--text); }
+    .result-impact { font-family: var(--font-body); font-size: 15px; color: var(--text-muted); margin-top: 12px; }
+    .result-impact strong { color: var(--text); font-weight: 600; }
 
     /* Funnel */
     .funnel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
@@ -179,10 +179,10 @@
 
   <!-- Big result -->
   <div class="result-card">
-    <div class="result-label">Total Revenue You've Left on the Table</div>
-    <div class="result-amount" id="total-amount">$0</div>
-    <div class="result-period" id="result-period-label">over 6 months without LSA</div>
-    <div class="result-annual">That's <span id="monthly-amount">$0</span>/month, every month you wait</div>
+    <div class="result-label">Monthly Revenue You're Missing</div>
+    <div class="result-amount" id="monthly-amount">$0</div>
+    <div class="result-period">per month</div>
+    <div class="result-impact" id="result-impact">Over 6 months: <strong>$0</strong> in total missed revenue</div>
     <div id="roi-badge" class="roi-badge" style="margin-top:14px">— ROI multiple</div>
   </div>
 
@@ -242,9 +242,9 @@
             <div class="funnel-label">Jobs you'd win per month on LSA</div>
           </div>
           <div class="funnel-arrow">↓ <span style="font-size:11px;color:var(--text-dim)">× avg job value</span></div>
-          <div class="funnel-step" style="border-color:rgba(240,165,0,0.3)">
-            <div class="funnel-n" id="f-monthly" style="color:var(--accent)">$0</div>
-            <div class="funnel-label" style="color:var(--text)">Monthly revenue missed</div>
+          <div class="funnel-step" style="border-color:rgba(240,165,0,0.3);flex-direction:column;align-items:flex-start;gap:2px">
+            <div style="font-size:11px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)">Monthly revenue missed</div>
+            <div id="f-monthly" style="font-family:var(--font-mono);font-size:28px;font-weight:500;color:var(--accent);line-height:1.1">$0</div>
           </div>
         </div>
       </div>
@@ -312,10 +312,9 @@ function update() {
   const lsaCostPerMonth = 300;
   const roi = monthly > 0 ? (monthly / lsaCostPerMonth).toFixed(1) : '0';
 
-  // Big number = cumulative total, drives home the pain
-  get('total-amount').textContent = fmtFull(total);
-  get('result-period-label').textContent = `over ${months} month${months === 1 ? '' : 's'} without LSA`;
+  // Result card — monthly is the hero, total is the impact line
   get('monthly-amount').textContent = fmtFull(monthly);
+  get('result-impact').innerHTML = `Over ${months} month${months === 1 ? '' : 's'}: <strong>${fmtFull(total)}</strong> in total missed revenue`;
   get('roi-badge').textContent = `${roi}x return vs. ~$${lsaCostPerMonth}/mo LSA spend`;
 
   // Funnel
