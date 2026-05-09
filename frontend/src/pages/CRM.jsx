@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api, STATUSES, VERTICAL_LABELS, formatMoney, statusBadgeClass, sourceTagClass } from '../utils/api';
 import { buildPitchEmail, buildGmailUrl } from '../utils/pitch';
 import CsvImportModal from '../components/CsvImportModal';
+import { isLocalMode } from '../utils/localStore';
 
 export default function CRM() {
   const [leads, setLeads] = useState([]);
@@ -122,6 +123,14 @@ export default function CRM() {
         </button>
       </div>
 
+      {/* Local mode banner */}
+      {isLocalMode() && (
+        <div className="alert alert-warning" style={{ marginBottom: 16, fontSize: 12 }}>
+          <span>⚠️</span>
+          <span>Backend not connected — data is stored locally in your browser. <a href="/settings" style={{ color: 'var(--accent)' }}>Configure backend →</a></span>
+        </div>
+      )}
+
       {/* Pipeline steps */}
       <div className="pipeline">
         {STATUSES.map((s, i) => (
@@ -179,6 +188,7 @@ export default function CRM() {
                   <th><input type="checkbox" checked={selected.size === leads.length && leads.length > 0} onChange={toggleAll} /></th>
                   <th>Business</th>
                   <th>City</th>
+                  <th>State</th>
                   <th>Vertical</th>
                   <th>Rating</th>
                   <th>Email</th>
@@ -196,6 +206,7 @@ export default function CRM() {
                       {lead.website && <a href={lead.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>↗ website</a>}
                     </td>
                     <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{lead.city}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{lead.state || '—'}</td>
                     <td>
                       <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                         {VERTICAL_LABELS[lead.vertical] || lead.vertical}

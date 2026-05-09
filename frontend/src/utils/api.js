@@ -1,3 +1,5 @@
+import { localStore, setLocalMode } from './localStore';
+
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
@@ -12,29 +14,58 @@ async function request(path, options = {}) {
   return data;
 }
 
+// Try backend, fall back to localStore silently
+async function withFallback(backendCall, localCall) {
+  try {
+    const result = await backendCall();
+    setLocalMode(false);
+    return result;
+  } catch {
+    setLocalMode(true);
+    return localCall();
+  }
+}
+
 export const api = {
-  // Leads
   getLeads: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request(`/leads${qs ? '?' + qs : ''}`);
+    return withFallback(
+      () => request(`/leads${qs ? '?' + qs : ''}`),
+      () => localStore.getLeads(params)
+    );
   },
-  updateLead: (id, updates) => request(`/leads/${id}`, { method: 'PATCH', body: updates }),
-  deleteLead: (id) => request(`/leads/${id}`, { method: 'DELETE' }),
-  getStats: () => request('/leads/stats/summary'),
 
-  // Search
+  updateLead: (id, updates) => withFallback(
+    () => request(`/leads/${id}`, { method: 'PATCH', body: updates }),
+    () => localStore.updateLead(id, updates)
+  ),
+
+  deleteLead: (id) => withFallback(
+    () => request(`/leads/${id}`, { method: 'DELETE' }),
+    () => localStore.deleteLead(id)
+  ),
+
+  getStats: () => withFallback(
+    () => request('/leads/stats/summary'),
+    () => localStore.getStats()
+  ),
+
   searchLeads: (city, vertical) => request('/search', { method: 'POST', body: { city, vertical } }),
-  getSearchHistory: () => request('/search/history'),
 
-  // Email
+  getSearchHistory: () => withFallback(
+    () => request('/search/history'),
+    () => localStore.getSearchHistory()
+  ),
+
   findEmail: (id) => request(`/email/find/${id}`, { method: 'POST' }),
   findEmailsBatch: (ids) => request('/email/find-batch', { method: 'POST', body: { ids } }),
 
-  // Import
-  importLeads: (leads) => request('/leads/import', { method: 'POST', body: { leads } }),
+  importLeads: (leads) => withFallback(
+    () => request('/leads/import', { method: 'POST', body: { leads } }),
+    () => localStore.addBatch(leads)
+  ),
 
-  // Health
-  health: () => request('/health').catch(() => ({ status: 'error' }))
+  health: () => request('/health').catch(() => ({ status: 'error' })),
 };
 
 export const STATUSES = ['New', 'Researching', 'Contacted', 'Replied', 'Qualified', 'Closed'];
@@ -45,11 +76,9 @@ export function formatMoney(n) {
   if (!n && n !== 0) return '—';
   return '$' + Math.round(n).toLocaleString();
 }
-
 export function statusBadgeClass(status) {
   return 'badge badge-' + status.toLowerCase();
 }
-
 export function sourceTagClass(source) {
   if (!source) return 'source-tag';
   return 'source-tag source-' + source;

@@ -1,10 +1,11 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { VERTICALS, VERTICAL_LABELS } from '../utils/api';
 
-// Auto-detect which CSV column maps to which field
 const COLUMN_MAP = {
   name:        ['name', 'business', 'company', 'business name', 'company name', 'title'],
-  city:        ['city', 'town', 'location', 'market', 'city/state'],
+  city:        ['city', 'town', 'market', 'city name'],
+  state:       ['state', 'st', 'province', 'region', 'state/province'],
+  cityState:   ['city/state', 'city, state', 'location', 'city & state'],
   address:     ['address', 'addr', 'full address', 'street', 'formatted address'],
   phone:       ['phone', 'tel', 'telephone', 'phone number', 'contact'],
   website:     ['website', 'url', 'web', 'site', 'website url', 'homepage'],
@@ -13,6 +14,36 @@ const COLUMN_MAP = {
   reviewCount: ['reviews', 'review count', 'num reviews', 'number of reviews', 'ratings', 'total reviews'],
   vertical:    ['vertical', 'category', 'type', 'industry', 'trade'],
 };
+
+// Parse "Charlotte, NC" or "Charlotte NC" → { city, state }
+function splitCityState(raw) {
+  if (!raw) return { city: '', state: '' };
+  const match = raw.match(/^(.+?),?\s+([A-Z]{2})$/);
+  if (match) return { city: match[1].trim(), state: match[2] };
+  return { city: raw.trim(), state: '' };
+}
+
+const US_STATES = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',
+  CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',
+  IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',
+  ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',
+  MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+  NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',
+  OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
+  TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
+  WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',DC:'Washington DC',
+};
+
+// Normalize state: "NC", "North Carolina", "north carolina" → "NC"
+function normalizeState(raw) {
+  if (!raw) return '';
+  const up = raw.trim().toUpperCase();
+  if (US_STATES[up]) return up;
+  const lower = raw.trim().toLowerCase();
+  const match = Object.entries(US_STATES).find(([, name]) => name.toLowerCase() === lower);
+  return match ? match[0] : raw.trim().slice(0, 2).toUpperCase();
+}
 
 function detectColumns(headers) {
   const mapping = {};
@@ -31,7 +62,6 @@ function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return { headers: [], rows: [] };
 
-  // Handle quoted fields
   function parseLine(line) {
     const result = [];
     let cur = '';
@@ -57,31 +87,54 @@ function parseCSV(text) {
 }
 
 function rowsToLeads(rows, headers, colMap, defaultVertical) {
+  const knownVerticals = Object.keys(VERTICAL_LABELS);
   return rows.map(row => {
     const get = (field) => colMap[field] !== undefined ? (row[colMap[field]] || '').trim() : '';
-    const rating = parseFloat(get('rating')) || null;
-    const reviewCount = parseInt(get('reviewCount')) || 0;
-    const vertical = (get('vertical') || defaultVertical).toLowerCase().replace(/\s+/g, '');
-    const knownVerticals = Object.keys(VERTICAL_LABELS);
+
+    // City + state resolution
+    let city = get('city');
+    let state = get('state');
+
+    if (colMap.cityState !== undefined) {
+      // dedicated "city/state" or "location" column like "Charlotte, NC"
+      const parsed = splitCityState(get('cityState'));
+      if (!city) city = parsed.city;
+      if (!state) state = parsed.state;
+    } else if (!state && city) {
+      // try to extract state from the city field itself
+      const parsed = splitCityState(city);
+      city = parsed.city;
+      state = parsed.state;
+    }
+
+    state = normalizeState(state);
+
+    const rawVertical = (get('vertical') || defaultVertical).toLowerCase().replace(/[\s-]/g, '');
+    const vertical = knownVerticals.includes(rawVertical) ? rawVertical : defaultVertical;
+
     return {
-      name: get('name') || 'Unknown Business',
-      city: get('city') || '',
-      address: get('address') || '',
-      phone: get('phone') || null,
-      website: get('website') || null,
-      email: get('email') || null,
+      name:        get('name') || 'Unknown Business',
+      city,
+      state,
+      address:     get('address') || '',
+      phone:       get('phone') || null,
+      website:     get('website') || null,
+      email:       get('email') || null,
       emailSource: get('email') ? 'csv' : null,
-      rating,
-      reviewCount,
-      vertical: knownVerticals.includes(vertical) ? vertical : defaultVertical,
+      rating:      parseFloat(get('rating')) || null,
+      reviewCount: parseInt(get('reviewCount')) || 0,
+      vertical,
     };
   }).filter(l => l.name && l.name !== 'Unknown Business');
 }
 
+// Fields shown in the detected-columns badge row
+const BADGE_FIELDS = ['name','city','state','address','phone','website','email','rating','reviewCount','vertical'];
+
 export default function CsvImportModal({ onClose, onImport }) {
-  const [step, setStep] = useState('upload'); // upload | preview | importing | done
+  const [step, setStep] = useState('upload');
   const [dragOver, setDragOver] = useState(false);
-  const [parsed, setParsed] = useState(null); // { headers, rows }
+  const [parsed, setParsed] = useState(null);
   const [colMap, setColMap] = useState({});
   const [defaultVertical, setDefaultVertical] = useState('hvac');
   const [error, setError] = useState(null);
@@ -131,15 +184,14 @@ export default function CsvImportModal({ onClose, onImport }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 680 }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 700 }} onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div className="modal-title" style={{ margin: 0 }}>Import CSV</div>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
 
-        {/* STEP: Upload */}
+        {/* UPLOAD */}
         {step === 'upload' && (
           <>
             <div
@@ -149,13 +201,8 @@ export default function CsvImportModal({ onClose, onImport }) {
               onClick={() => fileRef.current.click()}
               style={{
                 border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border2)'}`,
-                borderRadius: 8,
-                padding: '48px 24px',
-                textAlign: 'center',
-                cursor: 'pointer',
-                background: dragOver ? 'var(--accent-dim)' : 'var(--bg)',
-                transition: 'all 0.15s',
-                marginBottom: 16,
+                borderRadius: 8, padding: '48px 24px', textAlign: 'center', cursor: 'pointer',
+                background: dragOver ? 'var(--accent-dim)' : 'var(--bg)', transition: 'all 0.15s', marginBottom: 16,
               }}
             >
               <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
@@ -172,8 +219,9 @@ export default function CsvImportModal({ onClose, onImport }) {
             <div className="alert alert-info" style={{ fontSize: 12 }}>
               <span>💡</span>
               <div>
-                <strong>Tip:</strong> Columns are auto-detected. Useful column names: <code>Name</code>, <code>City</code>, <code>Website</code>, <code>Phone</code>, <code>Email</code>, <code>Rating</code>, <code>Reviews</code>, <code>Vertical</code>.
-                Unknown columns are ignored.
+                Columns are auto-detected by name. Useful headers: <code>Name</code>, <code>City</code>, <code>State</code>,{' '}
+                <code>Website</code>, <code>Phone</code>, <code>Email</code>, <code>Rating</code>, <code>Reviews</code>.{' '}
+                A combined <code>City/State</code> column like <em>"Charlotte, NC"</em> also works.
               </div>
             </div>
 
@@ -181,7 +229,7 @@ export default function CsvImportModal({ onClose, onImport }) {
           </>
         )}
 
-        {/* STEP: Preview */}
+        {/* PREVIEW */}
         {step === 'preview' && parsed && (
           <>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
@@ -192,16 +240,15 @@ export default function CsvImportModal({ onClose, onImport }) {
                 </select>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', paddingBottom: 6 }}>
-                Applied to rows where vertical can't be detected from the CSV.
+                Applied to rows without a detectable vertical.
               </div>
             </div>
 
-            {/* Column mapping summary */}
             <div style={{ marginBottom: 14 }}>
               <div className="form-label" style={{ marginBottom: 6 }}>Detected columns</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {Object.entries(COLUMN_MAP).map(([field]) => {
-                  const detected = colMap[field] !== undefined;
+                {BADGE_FIELDS.map(field => {
+                  const detected = colMap[field] !== undefined || (field === 'city' && colMap.cityState !== undefined) || (field === 'state' && colMap.cityState !== undefined);
                   return (
                     <span key={field} style={{
                       fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 8px', borderRadius: 3,
@@ -216,7 +263,6 @@ export default function CsvImportModal({ onClose, onImport }) {
               </div>
             </div>
 
-            {/* Preview table */}
             <div className="form-label" style={{ marginBottom: 6 }}>
               Preview — first 5 of {parsed.rows.length} rows
             </div>
@@ -226,21 +272,21 @@ export default function CsvImportModal({ onClose, onImport }) {
                   <tr>
                     <th>Name</th>
                     <th>City</th>
+                    <th>State</th>
                     <th>Vertical</th>
                     <th>Website</th>
                     <th>Email</th>
-                    <th>Rating</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewLeads.map((l, i) => (
                     <tr key={i}>
-                      <td style={{ fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</td>
+                      <td style={{ fontWeight: 500, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</td>
                       <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{l.city || '—'}</td>
+                      <td style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>{l.state || '—'}</td>
                       <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{l.vertical}</td>
-                      <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.website || '—'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.website || '—'}</td>
                       <td style={{ fontSize: 11, color: l.email ? 'var(--green)' : 'var(--text-dim)' }}>{l.email || '—'}</td>
-                      <td style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>{l.rating ? `⭐ ${l.rating}` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -251,20 +297,20 @@ export default function CsvImportModal({ onClose, onImport }) {
 
             {!colMap.name && (
               <div className="alert alert-warning" style={{ marginBottom: 12, fontSize: 12 }}>
-                Could not detect a "Name" column. Check that your CSV has a column called Name, Business, or Company.
+                Could not detect a "Name" column. Make sure your CSV has a column called Name, Business, or Company.
               </div>
             )}
 
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => { setStep('upload'); setParsed(null); }}>← Back</button>
-              <button className="btn btn-primary" onClick={handleImport} disabled={!colMap.name && previewLeads.length === 0}>
+              <button className="btn btn-secondary" onClick={() => { setStep('upload'); setParsed(null); setError(null); }}>← Back</button>
+              <button className="btn btn-primary" onClick={handleImport}>
                 Import {parsed.rows.length} leads
               </button>
             </div>
           </>
         )}
 
-        {/* STEP: Importing */}
+        {/* IMPORTING */}
         {step === 'importing' && (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
@@ -272,7 +318,7 @@ export default function CsvImportModal({ onClose, onImport }) {
           </div>
         )}
 
-        {/* STEP: Done */}
+        {/* DONE */}
         {step === 'done' && (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
@@ -280,7 +326,7 @@ export default function CsvImportModal({ onClose, onImport }) {
               {importCount} leads imported
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
-              All leads added to your CRM with missed revenue calculated.
+              Missed revenue auto-calculated for every lead.
             </div>
             <button className="btn btn-primary" onClick={onClose}>View in CRM</button>
           </div>
