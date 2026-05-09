@@ -179,10 +179,10 @@
 
   <!-- Big result -->
   <div class="result-card">
-    <div class="result-label">Monthly Revenue You're Missing</div>
-    <div class="result-amount" id="monthly-amount">$0</div>
-    <div class="result-period">per month</div>
-    <div class="result-annual">Over a year: <span id="annual-amount">$0</span></div>
+    <div class="result-label">Total Revenue You've Left on the Table</div>
+    <div class="result-amount" id="total-amount">$0</div>
+    <div class="result-period" id="result-period-label">over 6 months without LSA</div>
+    <div class="result-annual">That's <span id="monthly-amount">$0</span>/month, every month you wait</div>
     <div id="roi-badge" class="roi-badge" style="margin-top:14px">— ROI multiple</div>
   </div>
 
@@ -194,7 +194,7 @@
 
         <div class="slider-group">
           <div class="slider-label">
-            <span class="slider-name">Monthly LSA calls available</span>
+            <span class="slider-name">Monthly LSA leads in your market</span>
             <span class="slider-val" id="val-calls">28</span>
           </div>
           <input type="range" id="sl-calls" min="5" max="80" value="28" step="1" />
@@ -202,7 +202,7 @@
 
         <div class="slider-group">
           <div class="slider-label">
-            <span class="slider-name">Close rate</span>
+            <span class="slider-name">Your close rate</span>
             <span class="slider-val" id="val-close">42%</span>
           </div>
           <input type="range" id="sl-close" min="10" max="90" value="42" step="1" />
@@ -210,7 +210,7 @@
 
         <div class="slider-group">
           <div class="slider-label">
-            <span class="slider-name">Average job ticket</span>
+            <span class="slider-name">Average job value</span>
             <span class="slider-val" id="val-ticket">$485</span>
           </div>
           <input type="range" id="sl-ticket" min="150" max="15000" value="485" step="25" />
@@ -218,15 +218,7 @@
 
         <div class="slider-group">
           <div class="slider-label">
-            <span class="slider-name">Call answer rate</span>
-            <span class="slider-val" id="val-answer">78%</span>
-          </div>
-          <input type="range" id="sl-answer" min="30" max="99" value="78" step="1" />
-        </div>
-
-        <div class="slider-group">
-          <div class="slider-label">
-            <span class="slider-name">Months without LSA</span>
+            <span class="slider-name">Months you've been off LSA</span>
             <span class="slider-val" id="val-months">6</span>
           </div>
           <input type="range" id="sl-months" min="1" max="36" value="6" step="1" />
@@ -238,34 +230,34 @@
     <div>
       <!-- Lead funnel -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-title">Lead Funnel</div>
+        <div class="card-title">What You're Missing Each Month</div>
         <div class="funnel">
           <div class="funnel-step">
             <div class="funnel-n" id="f-calls">28</div>
-            <div class="funnel-label">LSA calls/month</div>
+            <div class="funnel-label">LSA leads/month in your market</div>
           </div>
-          <div class="funnel-arrow">↓</div>
+          <div class="funnel-arrow">↓ <span style="font-size:11px;color:var(--text-dim)">you close <span id="f-cr">42</span>% of leads</span></div>
           <div class="funnel-step">
-            <div class="funnel-n" id="f-missed">6</div>
-            <div class="funnel-label">Missed (unanswered) calls</div>
+            <div class="funnel-n" id="f-jobs">12</div>
+            <div class="funnel-label">Jobs you'd win per month on LSA</div>
           </div>
-          <div class="funnel-arrow">↓</div>
-          <div class="funnel-step">
-            <div class="funnel-n" id="f-jobs">3</div>
-            <div class="funnel-label">Lost jobs/month</div>
+          <div class="funnel-arrow">↓ <span style="font-size:11px;color:var(--text-dim)">× avg job value</span></div>
+          <div class="funnel-step" style="border-color:rgba(240,165,0,0.3)">
+            <div class="funnel-n" id="f-monthly" style="color:var(--accent)">$0</div>
+            <div class="funnel-label" style="color:var(--text)">Monthly revenue missed</div>
           </div>
         </div>
       </div>
 
       <!-- Math breakdown -->
       <div class="card">
-        <div class="card-title">Full Math Breakdown</div>
-        <div class="math-row"><span class="key">Monthly calls</span><span class="val" id="m-calls">28</span></div>
-        <div class="math-row"><span class="key">Missed (unanswered)</span><span class="val" id="m-missed">6</span></div>
-        <div class="math-row"><span class="key">Converted at <span id="m-cr">42</span>%</span><span class="val" id="m-jobs">3</span></div>
-        <div class="math-row"><span class="key">× Avg ticket</span><span class="val" id="m-ticket">$485</span></div>
-        <div class="math-row total"><span class="key">Monthly missed revenue</span><span class="val" id="m-monthly">$0</span></div>
-        <div class="math-row total"><span class="key">Over <span id="m-months">6</span> months</span><span class="val" id="m-total">$0</span></div>
+        <div class="card-title">The Math</div>
+        <div class="math-row"><span class="key">LSA leads/month in market</span><span class="val" id="m-calls">28</span></div>
+        <div class="math-row"><span class="key">× Your close rate</span><span class="val" id="m-cr-pct">42%</span></div>
+        <div class="math-row"><span class="key">= Jobs won per month</span><span class="val" id="m-jobs">12</span></div>
+        <div class="math-row"><span class="key">× Avg job value</span><span class="val" id="m-ticket">$485</span></div>
+        <div class="math-row total"><span class="key">Monthly revenue missed</span><span class="val" id="m-monthly">$0</span></div>
+        <div class="math-row total"><span class="key">× <span id="m-months">6</span> months off LSA</span><span class="val" id="m-total">$0</span></div>
       </div>
     </div>
   </div>
@@ -287,21 +279,16 @@
 
 <script>
 const BENCHMARKS = {
-  hvac:        { calls: 28, close: 42, ticket: 485,  answer: 78, label: 'HVAC' },
-  plumbing:    { calls: 22, close: 55, ticket: 310,  answer: 80, label: 'Plumbing' },
-  electrical:  { calls: 18, close: 48, ticket: 420,  answer: 75, label: 'Electrical' },
-  roofing:     { calls: 12, close: 35, ticket: 8500, answer: 70, label: 'Roofing' },
-  landscaping: { calls: 35, close: 60, ticket: 280,  answer: 82, label: 'Landscaping' }
+  hvac:        { calls: 28, close: 42, ticket: 485,  label: 'HVAC' },
+  plumbing:    { calls: 22, close: 55, ticket: 310,  label: 'Plumbing' },
+  electrical:  { calls: 18, close: 48, ticket: 420,  label: 'Electrical' },
+  roofing:     { calls: 12, close: 35, ticket: 8500, label: 'Roofing' },
+  landscaping: { calls: 35, close: 60, ticket: 280,  label: 'Landscaping' }
 };
 
 let currentVertical = 'hvac';
 
-function fmt(n) {
-  if (n >= 1000) return '$' + (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
-  return '$' + Math.round(n).toLocaleString();
-}
 function fmtFull(n) { return '$' + Math.round(n).toLocaleString(); }
-
 function get(id) { return document.getElementById(id); }
 function val(id) { return parseInt(get(id).value); }
 
@@ -309,62 +296,60 @@ function update() {
   const calls = val('sl-calls');
   const close = val('sl-close');
   const ticket = val('sl-ticket');
-  const answer = val('sl-answer');
   const months = val('sl-months');
 
-  // Update display vals
+  // Update slider display labels
   get('val-calls').textContent = calls;
   get('val-close').textContent = close + '%';
   get('val-ticket').textContent = fmtFull(ticket);
-  get('val-answer').textContent = answer + '%';
   get('val-months').textContent = months;
 
-  // Calc
-  const missedCalls = Math.round(calls * (1 - answer / 100));
-  const lostJobs = Math.round(missedCalls * close / 100);
-  const monthly = lostJobs * ticket;
-  const annual = monthly * 12;
+  // Core calc: leads × close rate × ticket
+  const jobsWon = Math.round(calls * close / 100);
+  const monthly = jobsWon * ticket;
   const total = monthly * months;
-  const lsaCost = 300 * months; // rough $300/mo LSA spend estimate
-  const roi = lsaCost > 0 ? (total / lsaCost).toFixed(1) : '∞';
+  // ROI vs rough $300/mo LSA spend
+  const lsaCostPerMonth = 300;
+  const roi = monthly > 0 ? (monthly / lsaCostPerMonth).toFixed(1) : '0';
 
-  // Big number
+  // Big number = cumulative total, drives home the pain
+  get('total-amount').textContent = fmtFull(total);
+  get('result-period-label').textContent = `over ${months} month${months === 1 ? '' : 's'} without LSA`;
   get('monthly-amount').textContent = fmtFull(monthly);
-  get('annual-amount').textContent = fmtFull(annual);
-  get('roi-badge').textContent = `${roi}x ROI vs. estimated LSA cost`;
+  get('roi-badge').textContent = `${roi}x return vs. ~$${lsaCostPerMonth}/mo LSA spend`;
 
   // Funnel
   get('f-calls').textContent = calls;
-  get('f-missed').textContent = missedCalls;
-  get('f-jobs').textContent = lostJobs;
+  get('f-cr').textContent = close;
+  get('f-jobs').textContent = jobsWon;
+  get('f-monthly').textContent = fmtFull(monthly);
 
-  // Math
+  // Math breakdown
   get('m-calls').textContent = calls;
-  get('m-missed').textContent = missedCalls;
-  get('m-cr').textContent = close;
-  get('m-jobs').textContent = lostJobs;
+  get('m-cr-pct').textContent = close + '%';
+  get('m-jobs').textContent = jobsWon;
   get('m-ticket').textContent = fmtFull(ticket);
   get('m-monthly').textContent = fmtFull(monthly);
   get('m-months').textContent = months;
   get('m-total').textContent = fmtFull(total);
 
-  // Context bars
+  // Competitor context bars
   const b = BENCHMARKS[currentVertical];
-  const benchMonthly = Math.round(b.calls * (1 - b.answer/100) * (b.close/100) * b.ticket);
+  const benchMonthly = Math.round(b.calls * (b.close / 100) * b.ticket);
   const maxV = Math.max(monthly, benchMonthly, 1);
   get('context-bars').innerHTML = `
     <div class="context-bar">
-      <div class="context-label"><span>Your current gap</span><span style="color:var(--accent);font-family:var(--font-mono)">${fmtFull(monthly)}/mo</span></div>
+      <div class="context-label"><span>Your numbers</span><span style="color:var(--accent);font-family:var(--font-mono)">${fmtFull(monthly)}/mo</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round(monthly/maxV*100)}%"></div></div>
     </div>
     <div class="context-bar">
-      <div class="context-label"><span>${b.label} market avg gap</span><span style="font-family:var(--font-mono);color:var(--text-muted)">${fmtFull(benchMonthly)}/mo</span></div>
+      <div class="context-label"><span>${b.label} industry benchmark</span><span style="font-family:var(--font-mono);color:var(--text-muted)">${fmtFull(benchMonthly)}/mo</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round(benchMonthly/maxV*100)}%;background:var(--text-dim)"></div></div>
     </div>
   `;
 }
 
-// Vertical tabs
+// Vertical tabs — load benchmark defaults
 document.querySelectorAll('.vtab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.vtab').forEach(b => b.classList.remove('active'));
@@ -374,35 +359,36 @@ document.querySelectorAll('.vtab').forEach(btn => {
     get('sl-calls').value = b.calls;
     get('sl-close').value = b.close;
     get('sl-ticket').value = b.ticket;
-    get('sl-answer').value = b.answer;
     update();
   });
 });
 
 // Sliders
-['sl-calls','sl-close','sl-ticket','sl-answer','sl-months'].forEach(id => {
+['sl-calls','sl-close','sl-ticket','sl-months'].forEach(id => {
   get(id).addEventListener('input', update);
 });
 
-// CTA
+// CTA — mailto with their exact inputs
 get('cta-btn').addEventListener('click', () => {
   const calls = val('sl-calls');
   const close = val('sl-close');
   const ticket = val('sl-ticket');
-  const answer = val('sl-answer');
   const months = val('sl-months');
-  const missedCalls = Math.round(calls * (1 - answer / 100));
-  const lostJobs = Math.round(missedCalls * close / 100);
-  const monthly = lostJobs * ticket;
+  const jobsWon = Math.round(calls * close / 100);
+  const monthly = jobsWon * ticket;
   const total = monthly * months;
 
-  const subject = encodeURIComponent(`LSA inquiry — missing ${fmtFull(monthly)}/mo`);
+  const subject = encodeURIComponent(`LSA question — I'm missing ${fmtFull(monthly)}/mo`);
   const body = encodeURIComponent(
-    `Hi Gentry,\n\nI just used your LSA ROI calculator and my numbers came out to:\n\n` +
+    `Hi Gentry,\n\nI ran my numbers through your LSA calculator:\n\n` +
     `Vertical: ${BENCHMARKS[currentVertical].label}\n` +
-    `Monthly LSA calls: ${calls}\nClose rate: ${close}%\nAvg ticket: ${fmtFull(ticket)}\nAnswer rate: ${answer}%\n` +
-    `Months without LSA: ${months}\n\nMonthly missed revenue: ${fmtFull(monthly)}\nTotal missed (${months} mo): ${fmtFull(total)}\n\n` +
-    `I'd like to learn more about getting started with LSA.\n\nThanks`
+    `Monthly LSA leads in my market: ${calls}\n` +
+    `My close rate: ${close}%\n` +
+    `Avg job value: ${fmtFull(ticket)}\n` +
+    `Time off LSA: ${months} months\n\n` +
+    `Monthly revenue I'm missing: ${fmtFull(monthly)}\n` +
+    `Total missed over ${months} months: ${fmtFull(total)}\n\n` +
+    `I'd like to learn more about getting started.\n\nThanks`
   );
   window.location.href = `mailto:gentry.gevers@gmail.com?subject=${subject}&body=${body}`;
 });
