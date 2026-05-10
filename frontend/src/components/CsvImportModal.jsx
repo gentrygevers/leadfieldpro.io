@@ -113,12 +113,28 @@ function cityStateFromAddress(addr) {
 // ── Detection ────────────────────────────────────────────────────────────────
 function detectByName(headers) {
   const map = {};
+  const usedCols = new Set();
+
+  // Match priority: exact > multi-word phrase > single-word exact only
+  // This prevents "Business Email" matching 'name' via the word "business"
+  function tryMatch(lower, aliases) {
+    return (
+      aliases.find(a => lower === a) ||                                    // exact match
+      aliases.find(a => a.includes(' ') && lower.includes(a)) ||          // multi-word phrase (e.g. "business email")
+      aliases.find(a => !a.includes(' ') && a.length > 4 && lower === a)  // long single-word exact fallback
+    );
+  }
+
   headers.forEach((h, i) => {
+    if (usedCols.has(i)) return;
     const lower = h.toLowerCase().trim().replace(/[_\-]/g, ' ');
     for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
       if (map[field] !== undefined) continue;
-      if (aliases.some(a => lower === a || lower.includes(a))) {
+      if (usedCols.has(i)) return;
+      if (tryMatch(lower, aliases)) {
         map[field] = i;
+        usedCols.add(i);
+        break;
       }
     }
   });
