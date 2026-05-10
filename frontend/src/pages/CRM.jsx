@@ -30,6 +30,7 @@ export default function CRM() {
   const [showImport, setShowImport] = useState(false);
   const [enrichLead, setEnrichLead] = useState(null);
   const [notesLead, setNotesLead] = useState(null);
+  const [editLead, setEditLead] = useState(null);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -129,6 +130,17 @@ export default function CRM() {
     try {
       await api.deleteLead(lead.id);
       setLeads(prev => prev.filter(l => l.id !== lead.id));
+    } catch {}
+  }
+
+  async function handleBulkDelete() {
+    const count = selected.size;
+    if (!confirm(`Delete ${count} lead${count !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    const ids = [...selected];
+    try {
+      await Promise.all(ids.map(id => api.deleteLead(id)));
+      setLeads(prev => prev.filter(l => !ids.includes(l.id)));
+      setSelected(new Set());
     } catch {}
   }
 
@@ -249,6 +261,11 @@ export default function CRM() {
           <option value="All">All Statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {selected.size > 0 && (
+          <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} style={{ marginLeft: 8 }}>
+            <TrashIcon /> Delete {selected.size} selected
+          </button>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {leads.length} leads
         </span>
@@ -344,6 +361,9 @@ export default function CRM() {
                           <button className="btn btn-secondary btn-sm" onClick={() => setEnrichLead(lead)} title="Enrich">
                             <EnrichIcon />
                           </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEditLead(lead)} title="Edit lead">
+                            <PencilIcon />
+                          </button>
                           <button className="btn btn-secondary btn-sm" onClick={() => setNotesLead(lead)}
                             title={lead.notes ? 'View notes' : 'Add notes'} style={{ position: 'relative' }}>
                             <NotesIcon />
@@ -377,6 +397,12 @@ export default function CRM() {
       {notesLead && (
         <NotesModal lead={notesLead} onClose={() => setNotesLead(null)}
           onSave={updated => { setLeads(prev => prev.map(l => l.id === updated.id ? updated : l)); setNotesLead(null); }} />
+      )}
+
+      {/* Edit lead modal */}
+      {editLead && (
+        <EditLeadModal lead={editLead} onClose={() => setEditLead(null)}
+          onSave={updated => { setLeads(prev => prev.map(l => l.id === updated.id ? updated : l)); setEditLead(null); }} />
       )}
 
       {/* CSV import modal */}
@@ -462,6 +488,80 @@ function NotesModal({ lead, onClose, onSave }) {
   );
 }
 
+function EditLeadModal({ lead, onClose, onSave }) {
+  const [form, setForm] = useState({
+    name: lead.name || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    website: lead.website || '',
+    city: lead.city || '',
+    state: lead.state || '',
+    vertical: lead.vertical || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const updated = await api.updateLead(lead.id, form);
+      onSave(updated);
+    } catch { onClose(); } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div className="modal-title" style={{ margin: 0 }}>Edit Lead</div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="modal-field">
+            <label>Business Name</label>
+            <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} autoFocus />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="modal-field">
+              <label>Phone</label>
+              <input className="form-input" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="(555) 000-0000" />
+            </div>
+            <div className="modal-field">
+              <label>Email</label>
+              <input className="form-input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="owner@business.com" />
+            </div>
+          </div>
+          <div className="modal-field">
+            <label>Website</label>
+            <input className="form-input" value={form.website} onChange={e => set('website', e.target.value)} placeholder="https://..." />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+            <div className="modal-field">
+              <label>City</label>
+              <input className="form-input" value={form.city} onChange={e => set('city', e.target.value)} />
+            </div>
+            <div className="modal-field">
+              <label>State</label>
+              <input className="form-input" value={form.state} onChange={e => set('state', e.target.value)} maxLength={2} style={{ textTransform: 'uppercase' }} />
+            </div>
+          </div>
+          <div className="modal-field">
+            <label>Vertical / Industry</label>
+            <input className="form-input" value={form.vertical} onChange={e => set('vertical', e.target.value)} placeholder="e.g. plumbing, roofing, hvac" />
+          </div>
+        </div>
+        <div className="modal-actions" style={{ marginTop: 20 }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? <span className="spinner" /> : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EnrichIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>; }
 function NotesIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>; }
 function DownloadIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>; }
@@ -471,3 +571,4 @@ function SendIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fil
 function TrashIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>; }
 function EmptyIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
 function GmailIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>; }
+function PencilIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>; }
