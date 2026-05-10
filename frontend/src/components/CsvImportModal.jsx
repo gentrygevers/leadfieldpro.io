@@ -19,8 +19,9 @@ const COLUMN_ALIASES = {
                  'phone number 1','formatted_phone_number'],
   website:     ['website','url','web','site','site url','website url','homepage','domain',
                  'web address','site_name','http'],
-  email:       ['email','mail','email address','e-mail','email_1','contact email','work email',
-                 'business email','owner email'],
+  email:       ['email','mail','email address','e-mail','email_1','email_2','contact email','work email',
+                 'business email','owner email','primary email','email address 1','email 1',
+                 'email_address','e_mail','emailaddress'],
   rating:      ['rating','stars','score','google rating','avg rating','average rating',
                  'star rating','review score','rating_local_business','place_rating'],
   reviewCount: ['reviews','review count','num reviews','number of reviews','ratings',
@@ -135,15 +136,21 @@ function detectByValues(headers, rows, existing) {
   const used = new Set(Object.values(existing));
   const result = { ...existing };
 
+  // Scan up to 30 rows for better detection on sparse data
   headers.forEach((h, i) => {
     if (used.has(i)) return;
-    const samples = rows.slice(0, 10).map(r => (r[i] || '').trim()).filter(Boolean).slice(0, 5);
+    const allSamples = rows.slice(0, 30).map(r => (r[i] || '').trim());
+    const samples = allSamples.filter(Boolean);
     if (!samples.length) return;
 
+    // LinkedIn: any match
     if (!result.linkedinUrl && samples.some(v => LI_RE.test(v))) { result.linkedinUrl = i; used.add(i); return; }
-    if (!result.email && samples.filter(v => EMAIL_RE.test(v)).length >= samples.length * 0.7) { result.email = i; used.add(i); return; }
-    if (!result.website && samples.filter(v => URL_RE.test(v)).length >= samples.length * 0.6) { result.website = i; used.add(i); return; }
-    if (!result.phone && samples.filter(v => PHONE_RE.test(v) && v.replace(/\D/g,'').length >= 7).length >= samples.length * 0.7) { result.phone = i; used.add(i); return; }
+    // Email: any 1+ valid email found in column (scraped data is often sparse)
+    if (!result.email && samples.some(v => EMAIL_RE.test(v))) { result.email = i; used.add(i); return; }
+    // Website: 40% threshold (URLs can be missing too)
+    if (!result.website && samples.filter(v => URL_RE.test(v)).length >= samples.length * 0.4) { result.website = i; used.add(i); return; }
+    // Phone: 50% threshold
+    if (!result.phone && samples.filter(v => PHONE_RE.test(v) && v.replace(/\D/g,'').length >= 7).length >= samples.length * 0.5) { result.phone = i; used.add(i); return; }
     if (!result.rating && samples.every(v => RATING_RE.test(v))) { result.rating = i; used.add(i); return; }
     if (!result.reviewCount && samples.every(v => INT_RE.test(v)) && samples.some(v => parseInt(v) > 5)) { result.reviewCount = i; used.add(i); return; }
   });
